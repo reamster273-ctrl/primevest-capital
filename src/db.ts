@@ -1,3 +1,21 @@
+// ==========================================
+// TEMPORARY DAILY TASK FUNCTIONS
+// ==========================================
+
+export function adminCreateTask(adminId: string, task: any) {
+  console.log("Temporary adminCreateTask()", adminId, task);
+  return getDbState();
+}
+
+export function adminUpdateTask(adminId: string, taskId: string, updates: any) {
+  console.log("Temporary adminUpdateTask()", adminId, taskId, updates);
+  return getDbState();
+}
+
+export function adminDeleteTask(adminId: string, taskId: string) {
+  console.log("Temporary adminDeleteTask()", adminId, taskId);
+  return getDbState();
+}
 import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan } from './types';
 import { supabase } from './lib/supabase';
 
