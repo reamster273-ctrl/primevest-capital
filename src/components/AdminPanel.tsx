@@ -5,9 +5,7 @@ import {
   UserMinus, UserCheck, Key, Settings, RefreshCw, ChevronRight, Eye,
   ArrowUp, ArrowDown, GripVertical, Award, CheckSquare, CheckCircle, XCircle, Activity, Landmark
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar 
-} from 'recharts';
+
 import { User, Transaction, Investment, Notification, InvestmentPlan, DailyTask } from '../types';
 import { 
   getDbState, approveDeposit, rejectDeposit, approveWithdrawal, rejectWithdrawal, 
@@ -770,55 +768,7 @@ export default function AdminPanel({ adminId, onNavigateToUser, onBackToDashboar
                 </div>
 
                 <div className="h-64 w-full pt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    {chartView === 'capital' ? (
-                      <AreaChart
-                        data={[
-                          { date: 'Jan', 'Admin Managed Money': 800000 },
-                          { date: 'Feb', 'Admin Managed Money': 1200000 },
-                          { date: 'Mar', 'Admin Managed Money': 1500000 },
-                          { date: 'Apr', 'Admin Managed Money': 1900000 },
-                          { date: 'May', 'Admin Managed Money': 2300000 },
-                          { date: 'Jun', 'Admin Managed Money': 3100000 },
-                          { date: 'Jul', 'Admin Managed Money': totalDepositsSum + activeInvestmentsSum }
-                        ]}
-                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient id="goldGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#D4AF37" stopOpacity={0.0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid stroke="#16161d" vertical={false} />
-                        <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₦${(v/1000).toFixed(0)}k`} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Area type="monotone" dataKey="Admin Managed Money" stroke="#D4AF37" strokeWidth={2} fillOpacity={1} fill="url(#goldGradient)" />
-                      </AreaChart>
-                    ) : (
-                      <BarChart
-                        data={[
-                          { date: 'Jan', 'Active Users': 2, 'New Registrations': 1 },
-                          { date: 'Feb', 'Active Users': 3, 'New Registrations': 1 },
-                          { date: 'Mar', 'Active Users': 3, 'New Registrations': 0 },
-                          { date: 'Apr', 'Active Users': 4, 'New Registrations': 1 },
-                          { date: 'May', 'Active Users': 4, 'New Registrations': 1 },
-                          { date: 'Jun', 'Active Users': 5, 'New Registrations': 2 },
-                          { date: 'Jul', 'Active Users': activeUsersCount, 'New Registrations': db.users.filter(u => u.role !== 'admin' && u.registeredAt?.startsWith('2026-07')).length || 1 }
-                        ]}
-                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                      >
-                        <CartesianGrid stroke="#16161d" vertical={false} />
-                        <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'monospace', paddingTop: 8 }} />
-                        <Bar dataKey="Active Users" fill="#D4AF37" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="New Registrations" fill="#ffffff" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    )}
-                  </ResponsiveContainer>
+                  <div className="p-6 text-center text-zinc-400">Charts removed.</div>
                 </div>
               </div>
 
