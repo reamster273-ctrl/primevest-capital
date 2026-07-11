@@ -1,4 +1,30 @@
 // ==========================================
+// TEMPORARY BANK VERIFICATION FUNCTIONS
+// ==========================================
+
+export function adminVerifyBankDetails(adminId: string, userId: string) {
+  console.log("Temporary adminVerifyBankDetails()", adminId, userId);
+  return getDbState();
+}
+
+export function adminEditUserBankDetails(
+  adminId: string,
+  userId: string,
+  bankName: string,
+  accountName: string,
+  accountNumber: string
+) {
+  console.log(
+    "Temporary adminEditUserBankDetails()",
+    adminId,
+    userId,
+    bankName,
+    accountName,
+    accountNumber
+  );
+  return getDbState();
+}
+// ==========================================
 // TEMPORARY DAILY TASK FUNCTIONS
 // ==========================================
 
