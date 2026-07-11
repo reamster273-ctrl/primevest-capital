@@ -1,0 +1,6 @@
+{
+  "name": "PrimeVest Capital",
+  "description": "A premium AI-powered Forex investment web application featuring professional trading desks, automatic yield calculators, and responsive secure portals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
