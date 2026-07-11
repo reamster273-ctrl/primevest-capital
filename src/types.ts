@@ -22,17 +22,7 @@ export interface User {
   withdrawalBankName?: string;
   withdrawalAccountName?: string;
   withdrawalAccountNumber?: string;
-  phoneNumber?: string;
-  country?: string;
-  profilePicture?: string;
-  notificationPreferences?: {
-    newTasks: boolean;
-    taskCompletions: boolean;
-    rewardClaims: boolean;
-    rewardExpirations: boolean;
-  };
-  bankVerificationStatus?: 'unverified' | 'pending' | 'verified' | 'rejected';
-  bankAdminNote?: string;
+  phone?: string;
 }
 
 export interface Transaction {
@@ -101,26 +91,4 @@ export interface InvestmentPlan {
   minElite?: number;
   maxElite?: number;
   paused: boolean;
-}
-
-export interface DailyTask {
-  id: string;
-  title: string;
-  description: string;
-  buttonText: string;
-  externalLink: string;
-  platformType: 'facebook' | 'telegram' | 'twitter' | 'instagram' | 'youtube' | 'website' | 'whatsapp';
-  startDate: string;
-  expiryDate: string;
-  active: boolean;
-  rewardAmount: number;
-}
-
-export interface UserTaskClaim {
-  id: string;
-  userId: string;
-  taskId: string;
-  taskTitle: string;
-  claimedAt: string;
-  amount: number;
 }

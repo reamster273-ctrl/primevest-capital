@@ -1,4 +1,5 @@
-import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan, DailyTask, UserTaskClaim } from './types';
+import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan } from './types';
+import { supabase } from './lib/supabase';
 
 interface DbState {
   users: User[];
@@ -18,8 +19,6 @@ interface DbState {
   inquiriesDeskAddress: string;
   inquiriesDeskEmail: string;
   inquiriesDeskPhone: string;
-  tasks: DailyTask[];
-  taskClaims: UserTaskClaim[];
 }
 
 // Initial seed plans
@@ -34,232 +33,12 @@ const defaultPlans: InvestmentPlan[] = [
 ];
 
 const INITIAL_STATE: DbState = {
-  users: [
-    {
-      id: 'admin-1',
-      name: 'PrimeVest Administrator',
-      email: 'admin@primevest.capital',
-      role: 'admin',
-      walletBalance: 0,
-      totalDeposits: 0,
-      totalWithdrawals: 0,
-      totalEarnings: 0,
-      referralEarnings: 0,
-      activeInvestmentsAmount: 0,
-      kycStatus: 'verified',
-      status: 'active',
-      referralCode: 'PRIMEADMIN',
-      tfaEnabled: true,
-      verifiedEmail: true,
-      registeredAt: '2026-01-01T08:00:00Z',
-      loginCount: 42,
-    },
-    {
-      id: 'user-1',
-      name: 'Jonathan Adebayo',
-      email: 'jonathan@example.com',
-      role: 'user',
-      walletBalance: 84000,
-      totalDeposits: 250000,
-      totalWithdrawals: 30000,
-      totalEarnings: 109000,
-      referralEarnings: 5200,
-      activeInvestmentsAmount: 130000,
-      kycStatus: 'verified',
-      status: 'active',
-      referralCode: 'JONATHAN88',
-      referredBy: 'CHIDI247',
-      tfaEnabled: false,
-      verifiedEmail: true,
-      registeredAt: '2026-06-15T10:30:00Z',
-      loginCount: 18,
-    },
-    {
-      id: 'user-2',
-      name: 'Chidi Okafor',
-      email: 'chidi@example.com',
-      role: 'user',
-      walletBalance: 12500,
-      totalDeposits: 52000,
-      totalWithdrawals: 0,
-      totalEarnings: 15200,
-      referralEarnings: 13000,
-      activeInvestmentsAmount: 52000,
-      kycStatus: 'pending',
-      status: 'active',
-      referralCode: 'CHIDI247',
-      tfaEnabled: true,
-      verifiedEmail: true,
-      registeredAt: '2026-06-10T14:15:00Z',
-      loginCount: 25,
-    },
-    {
-      id: 'user-3',
-      name: 'Halima Yusuf',
-      email: 'halima@example.com',
-      role: 'user',
-      walletBalance: 1500000,
-      totalDeposits: 1500000,
-      totalWithdrawals: 0,
-      totalEarnings: 0,
-      referralEarnings: 0,
-      activeInvestmentsAmount: 0,
-      kycStatus: 'unverified',
-      status: 'active',
-      referralCode: 'HALIMAY',
-      tfaEnabled: false,
-      verifiedEmail: false,
-      registeredAt: '2026-07-09T17:40:00Z',
-      loginCount: 2,
-    }
-  ],
-  transactions: [
-    {
-      id: 'tx-1',
-      userId: 'user-1',
-      userName: 'Jonathan Adebayo',
-      type: 'deposit',
-      amount: 120000,
-      status: 'approved',
-      date: '2026-06-15T11:00:00Z',
-      paymentProof: 'Bank Transfer Receipt #4829104',
-      adminNote: 'Verified bank wire.'
-    },
-    {
-      id: 'tx-2',
-      userId: 'user-1',
-      userName: 'Jonathan Adebayo',
-      type: 'deposit',
-      amount: 130000,
-      status: 'approved',
-      date: '2026-06-20T09:15:00Z',
-      paymentProof: 'Access Bank Transfer Screenshot',
-      adminNote: 'Instantly credited.'
-    },
-    {
-      id: 'tx-3',
-      userId: 'user-1',
-      userName: 'Jonathan Adebayo',
-      type: 'withdrawal',
-      amount: 30000,
-      status: 'approved',
-      date: '2026-06-28T16:00:00Z',
-      adminNote: 'Processed via USDT wallet.'
-    },
-    {
-      id: 'tx-4',
-      userId: 'user-2',
-      userName: 'Chidi Okafor',
-      type: 'deposit',
-      amount: 52000,
-      status: 'approved',
-      date: '2026-06-10T15:00:00Z',
-      paymentProof: 'Proof of Payment: GTBank receipt',
-      adminNote: 'Approved on review.'
-    },
-    {
-      id: 'tx-5',
-      userId: 'user-3',
-      userName: 'Halima Yusuf',
-      type: 'deposit',
-      amount: 1500000,
-      status: 'pending',
-      date: '2026-07-09T18:00:00Z',
-      paymentProof: 'UBA Mobile Banking PDF Receipt'
-    }
-  ],
-  investments: [
-    {
-      id: 'inv-1',
-      userId: 'user-1',
-      planId: 'growth',
-      planName: 'Growth',
-      amountInvested: 130000,
-      dailyReturn: 5500,
-      earningsAccumulated: 104000,
-      status: 'active',
-      startDate: '2026-06-21T00:00:00Z',
-      lastPayoutDate: '2026-07-09T00:00:00Z',
-      durationDays: 30,
-      daysElapsed: 18
-    },
-    {
-      id: 'inv-2',
-      userId: 'user-2',
-      planId: 'starter',
-      planName: 'Starter',
-      amountInvested: 52000,
-      dailyReturn: 2000,
-      earningsAccumulated: 15200,
-      status: 'active',
-      startDate: '2026-07-02T00:00:00Z',
-      lastPayoutDate: '2026-07-09T00:00:00Z',
-      durationDays: 30,
-      daysElapsed: 7
-    }
-  ],
-  notifications: [
-    {
-      id: 'notif-1',
-      userId: 'user-1',
-      title: 'Deposit Approved',
-      message: 'Your deposit of ₦120,000 has been approved and credited to your wallet.',
-      date: '2026-06-15T11:05:00Z',
-      read: true
-    },
-    {
-      id: 'notif-2',
-      userId: 'user-1',
-      title: 'Withdrawal Completed',
-      message: 'Your withdrawal request of ₦30,000 has been approved and sent to your bank account.',
-      date: '2026-06-28T16:15:00Z',
-      read: false
-    },
-    {
-      id: 'notif-3',
-      userId: 'user-2',
-      title: 'KYC Under Review',
-      message: 'Your KYC documents have been submitted and are currently being reviewed by compliance.',
-      date: '2026-06-11T09:00:00Z',
-      read: true
-    },
-    {
-      id: 'notif-all-1',
-      userId: 'all',
-      title: 'System Upgrade Complete',
-      message: 'We have optimized our AI-trading algorithm to premium Space 2.0 version, expecting increased market accuracy.',
-      date: '2026-07-01T00:00:00Z',
-      read: false
-    }
-  ],
-  referrals: [
-    {
-      id: 'ref-1',
-      referrerId: 'user-2',
-      refereeId: 'user-1',
-      refereeName: 'Jonathan Adebayo',
-      date: '2026-06-15T10:30:00Z',
-      status: 'active'
-    }
-  ],
-  auditLogs: [
-    {
-      id: 'log-1',
-      userId: 'admin-1',
-      action: 'LOGIN',
-      details: 'Admin logged in successfully.',
-      date: '2026-07-10T08:00:00Z',
-      ipAddress: '197.210.64.12'
-    },
-    {
-      id: 'log-2',
-      userId: 'admin-1',
-      action: 'APPROVE_DEPOSIT',
-      details: 'Approved deposit of ₦130,000 for Jonathan Adebayo',
-      date: '2026-06-20T09:15:00Z',
-      ipAddress: '197.210.64.12'
-    }
-  ],
+  users: [],
+  transactions: [],
+  investments: [],
+  notifications: [],
+  referrals: [],
+  auditLogs: [],
   plans: defaultPlans,
   referralRewardsEnabled: true,
   referralCommissionRate: 10, // 10%
@@ -270,55 +49,7 @@ const INITIAL_STATE: DbState = {
   inquiriesDeskText: 'Have custom compliance, regulatory, or institutional partnership questions? Our premium advisor team is here to support you 24 hours a day, 5 days a week.',
   inquiriesDeskAddress: 'Level 24, Tower 3, Marina Mall Financial Center, Lagos',
   inquiriesDeskEmail: 'support@primevest.capital',
-  inquiriesDeskPhone: '+234 (1) 4950 200',
-  tasks: [
-    {
-      id: 'task-1',
-      title: 'Follow our Facebook Page',
-      description: 'Follow our official Facebook page to receive direct updates, insights and financial analysis.',
-      buttonText: 'Follow Facebook',
-      externalLink: 'https://facebook.com/primevest.capital',
-      platformType: 'facebook',
-      startDate: '2026-07-01T00:00:00Z',
-      expiryDate: '2026-08-31T23:59:59Z',
-      active: true,
-      rewardAmount: 500,
-    },
-    {
-      id: 'task-2',
-      title: 'Join our Telegram Channel',
-      description: 'Get instant notifications on trading signals, plan additions and custom market calls.',
-      buttonText: 'Join Telegram',
-      externalLink: 'https://t.me/primevest_capital',
-      platformType: 'telegram',
-      startDate: '2026-07-01T00:00:00Z',
-      expiryDate: '2026-08-31T23:59:59Z',
-      active: true,
-      rewardAmount: 1000,
-    },
-    {
-      id: 'task-3',
-      title: 'Follow us on X (Twitter)',
-      description: 'Stay updated with our short financial threads and market micro-news on Twitter.',
-      buttonText: 'Follow @PrimeVest',
-      externalLink: 'https://x.com/primevest',
-      platformType: 'twitter',
-      startDate: '2026-07-01T00:00:00Z',
-      expiryDate: '2026-08-31T23:59:59Z',
-      active: true,
-      rewardAmount: 750,
-    }
-  ],
-  taskClaims: [
-    {
-      id: 'claim-1',
-      userId: 'user-1',
-      taskId: 'task-1',
-      taskTitle: 'Follow our Facebook Page',
-      claimedAt: '2026-07-10T11:00:00Z',
-      amount: 500
-    }
-  ]
+  inquiriesDeskPhone: '+234 (1) 4950 200'
 };
 
 const DB_KEY = 'primevest_db_state';
@@ -343,6 +74,8 @@ export function saveDbState(state: DbState) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(DB_KEY, JSON.stringify(state));
   }
+  // Asynchronously push the changes to Supabase in the background
+  pushToSupabase(state);
 }
 
 // Generate sequential IDs
@@ -986,6 +719,14 @@ export function adminDeleteUser(adminId: string, targetUserId: string): DbState 
     ipAddress: '127.0.0.1'
   });
   saveDbState(state);
+
+  // Explicitly delete user from Supabase in the background
+  if ((import.meta as any).env.VITE_SUPABASE_URL && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
+    supabase.from('users').delete().eq('id', targetUserId).then(({ error }) => {
+      if (error) console.error('Error deleting user from Supabase:', error);
+    });
+  }
+
   return state;
 }
 
@@ -1041,6 +782,14 @@ export function adminDeletePlan(adminId: string, planId: string): DbState {
     ipAddress: '127.0.0.1'
   });
   saveDbState(state);
+
+  // Explicitly delete plan from Supabase in the background
+  if ((import.meta as any).env.VITE_SUPABASE_URL && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
+    supabase.from('plans').delete().eq('id', planId).then(({ error }) => {
+      if (error) console.error('Error deleting plan from Supabase:', error);
+    });
+  }
+
   return state;
 }
 
@@ -1120,232 +869,159 @@ export function adminUpdateCompanySettings(
   return state;
 }
 
-// Admin: Bank Verification Actions
-export function adminVerifyBankDetails(adminId: string, targetUserId: string, status: 'verified' | 'rejected', adminNote?: string): DbState {
-  const state = getDbState();
-  state.users = state.users.map(u => {
-    if (u.id === targetUserId) {
-      return { 
-        ...u, 
-        bankVerificationStatus: status,
-        bankAdminNote: adminNote || ''
-      };
+export async function seedSupabase(state: DbState) {
+  if (!(import.meta as any).env.VITE_SUPABASE_URL || !(import.meta as any).env.VITE_SUPABASE_ANON_KEY) return;
+
+  try {
+    console.log('Seeding Supabase with initial demo database...');
+    if (state.users && state.users.length > 0) {
+      const { error } = await supabase.from('users').insert(state.users);
+      if (error) console.error('Error seeding users:', error);
     }
-    return u;
-  });
-  
-  // Add notification for user
-  const user = state.users.find(u => u.id === targetUserId);
-  if (user) {
-    state.notifications.push({
-      id: nextId('notif'),
-      userId: targetUserId,
-      title: status === 'verified' ? 'Bank Account Verified' : 'Bank Account Rejected',
-      message: status === 'verified' 
-        ? 'Your saved withdrawal bank details have been verified and locked. You can now request payouts seamlessly.'
-        : `Your saved withdrawal bank details were rejected: ${adminNote || 'incorrect details'}. Please revise in Settings.`,
-      date: new Date().toISOString(),
-      read: false
-    });
-  }
-
-  state.auditLogs.push({
-    id: nextId('log'),
-    userId: adminId,
-    action: 'VERIFY_BANK',
-    details: `Updated user ${targetUserId} bank details verification to ${status}`,
-    date: new Date().toISOString(),
-    ipAddress: '127.0.0.1'
-  });
-
-  saveDbState(state);
-  return state;
-}
-
-export function adminEditUserBankDetails(
-  adminId: string,
-  targetUserId: string,
-  bankName: string,
-  accountName: string,
-  accountNumber: string
-): DbState {
-  const state = getDbState();
-  state.users = state.users.map(u => {
-    if (u.id === targetUserId) {
-      return {
-        ...u,
-        withdrawalBankName: bankName,
-        withdrawalAccountName: accountName,
-        withdrawalAccountNumber: accountNumber
-      };
+    if (state.transactions && state.transactions.length > 0) {
+      const { error } = await supabase.from('transactions').insert(state.transactions);
+      if (error) console.error('Error seeding transactions:', error);
     }
-    return u;
-  });
-
-  state.auditLogs.push({
-    id: nextId('log'),
-    userId: adminId,
-    action: 'EDIT_BANK_DETAILS',
-    details: `Directly edited user ${targetUserId} bank details`,
-    date: new Date().toISOString(),
-    ipAddress: '127.0.0.1'
-  });
-
-  saveDbState(state);
-  return state;
-}
-
-// Admin: Task Management
-export function adminCreateTask(adminId: string, task: Omit<DailyTask, 'id'>): DbState {
-  const state = getDbState();
-  const newTask: DailyTask = {
-    ...task,
-    id: nextId('task')
-  };
-  state.tasks.push(newTask);
-
-  // Send system-wide notification
-  state.notifications.push({
-    id: nextId('notif'),
-    userId: 'all',
-    title: 'New Daily Engagement Task',
-    message: `A new task has been published: "${task.title}". Complete it to claim your reward of ₦${task.rewardAmount}!`,
-    date: new Date().toISOString(),
-    read: false
-  });
-
-  state.auditLogs.push({
-    id: nextId('log'),
-    userId: adminId,
-    action: 'CREATE_TASK',
-    details: `Created task "${task.title}" with reward ₦${task.rewardAmount}`,
-    date: new Date().toISOString(),
-    ipAddress: '127.0.0.1'
-  });
-
-  saveDbState(state);
-  return state;
-}
-
-export function adminUpdateTask(adminId: string, taskId: string, updates: Partial<DailyTask>): DbState {
-  const state = getDbState();
-  state.tasks = state.tasks.map(t => {
-    if (t.id === taskId) {
-      return { ...t, ...updates };
+    if (state.investments && state.investments.length > 0) {
+      const { error } = await supabase.from('investments').insert(state.investments);
+      if (error) console.error('Error seeding investments:', error);
     }
-    return t;
-  });
-
-  state.auditLogs.push({
-    id: nextId('log'),
-    userId: adminId,
-    action: 'UPDATE_TASK',
-    details: `Updated task ${taskId}`,
-    date: new Date().toISOString(),
-    ipAddress: '127.0.0.1'
-  });
-
-  saveDbState(state);
-  return state;
-}
-
-export function adminDeleteTask(adminId: string, taskId: string): DbState {
-  const state = getDbState();
-  state.tasks = state.tasks.filter(t => t.id !== taskId);
-  state.taskClaims = state.taskClaims.filter(c => c.taskId !== taskId);
-
-  state.auditLogs.push({
-    id: nextId('log'),
-    userId: adminId,
-    action: 'DELETE_TASK',
-    details: `Deleted task ${taskId}`,
-    date: new Date().toISOString(),
-    ipAddress: '127.0.0.1'
-  });
-
-  saveDbState(state);
-  return state;
-}
-
-// User: Claim Reward
-export function claimDailyReward(userId: string, taskId: string): { success: boolean; state: DbState; message: string } {
-  const state = getDbState();
-  const task = state.tasks.find(t => t.id === taskId);
-  if (!task) {
-    return { success: false, state, message: 'Task not found.' };
-  }
-
-  if (!task.active) {
-    return { success: false, state, message: 'This task is currently inactive.' };
-  }
-
-  // Check if task has expired (expiryDate is ISO String)
-  const now = new Date();
-  if (new Date(task.expiryDate) < now) {
-    return { success: false, state, message: 'This task has expired.' };
-  }
-
-  // Check if already claimed today/overall for this task
-  const alreadyClaimed = state.taskClaims.some(c => c.userId === userId && c.taskId === taskId);
-  if (alreadyClaimed) {
-    return { success: false, state, message: 'You have already claimed the reward for this task.' };
-  }
-
-  // Add reward to user wallet balance and earnings
-  state.users = state.users.map(u => {
-    if (u.id === userId) {
-      return {
-        ...u,
-        walletBalance: u.walletBalance + task.rewardAmount,
-        totalEarnings: u.totalEarnings + task.rewardAmount
-      };
+    if (state.notifications && state.notifications.length > 0) {
+      const { error } = await supabase.from('notifications').insert(state.notifications);
+      if (error) console.error('Error seeding notifications:', error);
     }
-    return u;
-  });
+    if (state.referrals && state.referrals.length > 0) {
+      const { error } = await supabase.from('referrals').insert(state.referrals);
+      if (error) console.error('Error seeding referrals:', error);
+    }
+    if (state.auditLogs && state.auditLogs.length > 0) {
+      const { error } = await supabase.from('audit_logs').insert(state.auditLogs);
+      if (error) console.error('Error seeding audit logs:', error);
+    }
+    if (state.plans && state.plans.length > 0) {
+      const { error } = await supabase.from('plans').insert(state.plans);
+      if (error) console.error('Error seeding plans:', error);
+    }
+    const settingsData = [
+      { key: 'referralRewardsEnabled', value: state.referralRewardsEnabled },
+      { key: 'referralCommissionRate', value: state.referralCommissionRate },
+      { key: 'companyBankName', value: state.companyBankName },
+      { key: 'companyAccountName', value: state.companyAccountName },
+      { key: 'companyAccountNumber', value: state.companyAccountNumber },
+      { key: 'inquiriesDeskTitle', value: state.inquiriesDeskTitle },
+      { key: 'inquiriesDeskText', value: state.inquiriesDeskText },
+      { key: 'inquiriesDeskAddress', value: state.inquiriesDeskAddress },
+      { key: 'inquiriesDeskEmail', value: state.inquiriesDeskEmail },
+      { key: 'inquiriesDeskPhone', value: state.inquiriesDeskPhone }
+    ];
+    const { error } = await supabase.from('settings').insert(settingsData);
+    if (error) console.error('Error seeding settings:', error);
+    console.log('Seeding completed successfully!');
+  } catch (error) {
+    console.error('Error seeding Supabase:', error);
+  }
+}
 
-  // Create claim record
-  const newClaim: UserTaskClaim = {
-    id: nextId('claim'),
-    userId,
-    taskId,
-    taskTitle: task.title,
-    claimedAt: now.toISOString(),
-    amount: task.rewardAmount
-  };
-  state.taskClaims.push(newClaim);
+export async function pushToSupabase(state: DbState) {
+  if (!(import.meta as any).env.VITE_SUPABASE_URL || !(import.meta as any).env.VITE_SUPABASE_ANON_KEY) return;
 
-  // Send user confirmation notification
-  state.notifications.push({
-    id: nextId('notif'),
-    userId,
-    title: 'Daily Reward Claimed!',
-    message: `You successfully completed the task "${task.title}" and claimed ₦${task.rewardAmount}!`,
-    date: now.toISOString(),
-    read: false
-  });
+  try {
+    await Promise.all([
+      state.users.length > 0 ? supabase.from('users').upsert(state.users) : Promise.resolve(),
+      state.transactions.length > 0 ? supabase.from('transactions').upsert(state.transactions) : Promise.resolve(),
+      state.investments.length > 0 ? supabase.from('investments').upsert(state.investments) : Promise.resolve(),
+      state.notifications.length > 0 ? supabase.from('notifications').upsert(state.notifications) : Promise.resolve(),
+      state.referrals.length > 0 ? supabase.from('referrals').upsert(state.referrals) : Promise.resolve(),
+      state.auditLogs.length > 0 ? supabase.from('audit_logs').upsert(state.auditLogs) : Promise.resolve(),
+      state.plans.length > 0 ? supabase.from('plans').upsert(state.plans) : Promise.resolve(),
+      supabase.from('settings').upsert([
+        { key: 'referralRewardsEnabled', value: state.referralRewardsEnabled },
+        { key: 'referralCommissionRate', value: state.referralCommissionRate },
+        { key: 'companyBankName', value: state.companyBankName },
+        { key: 'companyAccountName', value: state.companyAccountName },
+        { key: 'companyAccountNumber', value: state.companyAccountNumber },
+        { key: 'inquiriesDeskTitle', value: state.inquiriesDeskTitle },
+        { key: 'inquiriesDeskText', value: state.inquiriesDeskText },
+        { key: 'inquiriesDeskAddress', value: state.inquiriesDeskAddress },
+        { key: 'inquiriesDeskEmail', value: state.inquiriesDeskEmail },
+        { key: 'inquiriesDeskPhone', value: state.inquiriesDeskPhone }
+      ])
+    ]);
+  } catch (error) {
+    console.error('Error pushing to Supabase:', error);
+  }
+}
 
-  // Create transaction log so it shows up in Ledger
-  state.transactions.push({
-    id: nextId('tx'),
-    userId,
-    userName: state.users.find(u => u.id === userId)?.name || 'User',
-    type: 'investment_payout', // Use investment_payout or maybe show it in ledger as part of earnings?
-    amount: task.rewardAmount,
-    status: 'approved',
-    date: now.toISOString(),
-    planName: 'Daily Engagement Task Reward'
-  });
+export async function pullFromSupabase(): Promise<DbState> {
+  if (!(import.meta as any).env.VITE_SUPABASE_URL || !(import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
+    return getDbState();
+  }
 
-  state.auditLogs.push({
-    id: nextId('log'),
-    userId,
-    action: 'CLAIM_TASK_REWARD',
-    details: `Claimed ₦${task.rewardAmount} for task "${task.title}"`,
-    date: now.toISOString(),
-    ipAddress: '127.0.0.1'
-  });
+  try {
+    const [
+      { data: users, error: errUsers },
+      { data: transactions },
+      { data: investments },
+      { data: notifications },
+      { data: referrals },
+      { data: auditLogs },
+      { data: plans },
+      { data: settings }
+    ] = await Promise.all([
+      supabase.from('users').select('*'),
+      supabase.from('transactions').select('*'),
+      supabase.from('investments').select('*'),
+      supabase.from('notifications').select('*'),
+      supabase.from('referrals').select('*'),
+      supabase.from('audit_logs').select('*'),
+      supabase.from('plans').select('*'),
+      supabase.from('settings').select('*')
+    ]);
 
-  saveDbState(state);
-  return { success: true, state, message: `Successfully claimed ₦${task.rewardAmount.toLocaleString()} reward!` };
+    if (errUsers) {
+      console.warn('Could not read users from Supabase, possibly tables do not exist yet. Please run the SQL initialization script in your Supabase console.');
+      return getDbState();
+    }
+
+    const state = getDbState();
+
+    if (users && users.length > 0) {
+      state.users = users as User[];
+      state.transactions = (transactions || []) as Transaction[];
+      state.investments = (investments || []) as Investment[];
+      state.notifications = (notifications || []) as Notification[];
+      state.referrals = (referrals || []) as Referral[];
+      state.auditLogs = (auditLogs || []) as AuditLog[];
+      state.plans = (plans || []) as InvestmentPlan[];
+
+      if (settings) {
+        settings.forEach((s: any) => {
+          if (s.key === 'referralRewardsEnabled') state.referralRewardsEnabled = s.value;
+          if (s.key === 'referralCommissionRate') state.referralCommissionRate = Number(s.value);
+          if (s.key === 'companyBankName') state.companyBankName = s.value;
+          if (s.key === 'companyAccountName') state.companyAccountName = s.value;
+          if (s.key === 'companyAccountNumber') state.companyAccountNumber = s.value;
+          if (s.key === 'inquiriesDeskTitle') state.inquiriesDeskTitle = s.value;
+          if (s.key === 'inquiriesDeskText') state.inquiriesDeskText = s.value;
+          if (s.key === 'inquiriesDeskAddress') state.inquiriesDeskAddress = s.value;
+          if (s.key === 'inquiriesDeskEmail') state.inquiriesDeskEmail = s.value;
+          if (s.key === 'inquiriesDeskPhone') state.inquiriesDeskPhone = s.value;
+        });
+      }
+
+      // Save locally to keep the fast cached copy up to date
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DB_KEY, JSON.stringify(state));
+      }
+    } else {
+      // Database exists but has no data: seed the default records so the application starts filled
+      await seedSupabase(state);
+    }
+
+    return state;
+  } catch (error) {
+    console.error('Error pulling from Supabase:', error);
+    return getDbState();
+  }
 }
 

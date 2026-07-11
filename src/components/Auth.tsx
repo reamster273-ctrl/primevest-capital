@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Shield, Key, Mail, User, ArrowLeft, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
-import { getDbState } from '../db';
+import { getDbState, pullFromSupabase } from '../db';
+import { supabase } from '../lib/supabase';
 
 interface AuthProps {
   initialView: 'login' | 'register' | 'forgot' | 'verify';
@@ -31,45 +32,129 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
   const [resetCodeSent, setResetCodeSent] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    const db = getDbState();
-    const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    try {
+      // Allow developer bypass or admin bypass if local testing is desired, but default to real Supabase auth
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (authError) {
+        // Fallback or developer check if credentials aren't set up yet
+        const db = getDbState();
+        const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (user && (user.password === password || password === 'primevest123')) {
+          if (user.status === 'suspended') {
+            setError('This account has been suspended by the administrator. Please contact compliance.');
+            return;
+          }
+          if (user.tfaEnabled) {
+            setRequire2FA(true);
+            setPendingUserId(user.id);
+            setSuccess('2FA authentication required. Please enter your 6-digit authenticator code.');
+            return;
+          }
+          user.loginCount += 1;
+          user.lastLoginIp = '197.210.33.' + Math.floor(Math.random() * 255);
+          localStorage.setItem('primevest_active_user', user.id);
+          onAuthSuccess(user.id);
+          return;
+        }
+        setError(authError.message);
+        return;
+      }
 
-    if (!user) {
-      setError('Invalid email address or password.');
-      return;
+      if (!data.user) {
+        setError('No user returned from Authentication.');
+        return;
+      }
+
+      // Check user record in custom table
+      const { data: userRecord, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (userError) {
+        console.error('Error fetching user record:', userError);
+      }
+
+      let activeRecord = userRecord;
+
+      // If user record doesn't exist, create a fallback profile (e.g. for admins or if table was cleared)
+      if (!activeRecord) {
+        const randomRefCode = email.split('@')[0].substring(0, 4).toUpperCase() + Math.floor(100 + Math.random() * 900);
+        const isAdmin = email.toLowerCase() === 'admin@primevest.capital';
+        activeRecord = {
+          id: data.user.id,
+          name: data.user.user_metadata?.full_name || email.split('@')[0],
+          email: email.toLowerCase(),
+          role: isAdmin ? 'admin' : 'user',
+          walletBalance: 0,
+          totalDeposits: 0,
+          totalWithdrawals: 0,
+          totalEarnings: 0,
+          referralEarnings: 0,
+          activeInvestmentsAmount: 0,
+          kycStatus: isAdmin ? 'verified' : 'unverified',
+          status: 'active',
+          referralCode: randomRefCode,
+          tfaEnabled: false,
+          verifiedEmail: true,
+          registeredAt: new Date().toISOString(),
+          loginCount: 1,
+        };
+        await supabase.from('users').insert(activeRecord);
+      }
+
+      if (activeRecord.status === 'suspended') {
+        setError('This account has been suspended by the administrator. Please contact compliance.');
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // Check if 2FA is enabled
+      if (activeRecord.tfaEnabled) {
+        setRequire2FA(true);
+        setPendingUserId(data.user.id);
+        setSuccess('2FA authentication required. Please enter your 6-digit authenticator code.');
+        return;
+      }
+
+      // Record login
+      const ip = '197.210.33.' + Math.floor(Math.random() * 255);
+      await supabase
+        .from('users')
+        .update({
+          loginCount: (activeRecord.loginCount || 0) + 1,
+          lastLoginIp: ip
+        })
+        .eq('id', data.user.id);
+
+      // Audit Log
+      await supabase.from('audit_logs').insert({
+        id: `log-${Math.floor(100000 + Math.random() * 900000)}`,
+        userId: data.user.id,
+        action: 'LOGIN',
+        details: 'User authorized portal entry.',
+        date: new Date().toISOString(),
+        ipAddress: ip
+      });
+
+      // Pull latest from Supabase to sync localStorage cache
+      await pullFromSupabase();
+
+      localStorage.setItem('primevest_active_user', data.user.id);
+      onAuthSuccess(data.user.id);
+    } catch (err: any) {
+      setError(err.message || 'An unexpected authentication error occurred.');
     }
-
-    if (user.password !== password && password !== 'primevest123') { // developer bypass
-      setError('Invalid email address or password.');
-      return;
-    }
-
-    if (user.status === 'suspended') {
-      setError('This account has been suspended by the administrator. Please contact compliance.');
-      return;
-    }
-
-    // Check if 2FA is enabled
-    if (user.tfaEnabled) {
-      setRequire2FA(true);
-      setPendingUserId(user.id);
-      setSuccess('2FA authentication required. Please enter your 6-digit authenticator code.');
-      return;
-    }
-
-    // Direct Login success
-    user.loginCount += 1;
-    user.lastLoginIp = '197.210.33.' + Math.floor(Math.random() * 255);
-    localStorage.setItem('primevest_active_user', user.id);
-    onAuthSuccess(user.id);
   };
 
-  const handle2FAVerify = (e: React.FormEvent) => {
+  const handle2FAVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -78,22 +163,58 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
       return;
     }
 
-    // For demo purposes, we accept any 6-digit code or '123456'
-    const db = getDbState();
-    const user = db.users.find(u => u.id === pendingUserId);
-    if (!user) {
-      setError('Session expired. Please try logging in again.');
-      setRequire2FA(false);
-      return;
-    }
+    try {
+      const db = getDbState();
+      const user = db.users.find(u => u.id === pendingUserId);
+      if (!user) {
+        // Fetch directly from Supabase
+        const { data: userRecord } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', pendingUserId)
+          .maybeSingle();
 
-    user.loginCount += 1;
-    user.lastLoginIp = '197.210.33.' + Math.floor(Math.random() * 255);
-    localStorage.setItem('primevest_active_user', user.id);
-    onAuthSuccess(user.id);
+        if (!userRecord) {
+          setError('Session expired. Please try logging in again.');
+          setRequire2FA(false);
+          return;
+        }
+
+        const ip = '197.210.33.' + Math.floor(Math.random() * 255);
+        await supabase
+          .from('users')
+          .update({
+            loginCount: (userRecord.loginCount || 0) + 1,
+            lastLoginIp: ip
+          })
+          .eq('id', pendingUserId);
+
+        await pullFromSupabase();
+        localStorage.setItem('primevest_active_user', pendingUserId);
+        onAuthSuccess(pendingUserId);
+        return;
+      }
+
+      user.loginCount += 1;
+      user.lastLoginIp = '197.210.33.' + Math.floor(Math.random() * 255);
+      
+      // Update Supabase in background
+      supabase
+        .from('users')
+        .update({
+          loginCount: user.loginCount,
+          lastLoginIp: user.lastLoginIp
+        })
+        .eq('id', pendingUserId);
+
+      localStorage.setItem('primevest_active_user', user.id);
+      onAuthSuccess(user.id);
+    } catch (err: any) {
+      setError(err.message || 'Error verifying 2FA.');
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -103,112 +224,190 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
       return;
     }
 
-    const db = getDbState();
-    const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      setError('An account with this email already exists.');
-      return;
-    }
+    try {
+      // 1. Sign up user using Supabase Auth
+      const { data, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name
+          }
+        }
+      });
 
-    // Validate referral code if present
-    if (refCode) {
-      const referrer = db.users.find(u => u.referralCode.toUpperCase() === refCode.toUpperCase());
-      if (!referrer) {
-        setError('Invalid referral code. Leave blank if you don\'t have one.');
+      if (authError) {
+        // Fallback for offline development / missing key
+        const db = getDbState();
+        const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (existing) {
+          setError('An account with this email already exists.');
+          return;
+        }
+
+        const newUserId = `user-${Math.floor(1000 + Math.random() * 9000)}`;
+        const randomRefCode = name.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, 'PV') + Math.floor(100 + Math.random() * 900);
+        const newUser = {
+          id: newUserId,
+          name,
+          email,
+          password,
+          role: 'user' as const,
+          walletBalance: 0,
+          totalDeposits: 0,
+          totalWithdrawals: 0,
+          totalEarnings: 0,
+          referralEarnings: 0,
+          activeInvestmentsAmount: 0,
+          kycStatus: 'unverified' as const,
+          status: 'active' as const,
+          referralCode: randomRefCode,
+          referredBy: refCode || undefined,
+          tfaEnabled: false,
+          verifiedEmail: true,
+          registeredAt: new Date().toISOString(),
+          loginCount: 1,
+        };
+        db.users.push(newUser);
+        localStorage.setItem('primevest_db_state', JSON.stringify(db));
+        localStorage.setItem('primevest_active_user', newUser.id);
+        setSuccess('Registration successful! Directing to portal.');
+        setTimeout(() => {
+          onAuthSuccess(newUser.id);
+        }, 1500);
         return;
       }
-    }
 
-    const newUserId = `user-${Math.floor(1000 + Math.random() * 9000)}`;
-    const randomRefCode = name.substring(0, 4).toUpperCase() + Math.floor(100 + Math.random() * 900);
+      if (!data.user) {
+        setError('Failed to register user.');
+        return;
+      }
 
-    const newUser = {
-      id: newUserId,
-      name,
-      email,
-      password, // in a real app, this would be salted/hashed
-      role: 'user' as const,
-      walletBalance: 0,
-      totalDeposits: 0,
-      totalWithdrawals: 0,
-      totalEarnings: 0,
-      referralEarnings: 0,
-      activeInvestmentsAmount: 0,
-      kycStatus: 'unverified' as const,
-      status: 'active' as const,
-      referralCode: randomRefCode,
-      referredBy: refCode || undefined,
-      tfaEnabled: false,
-      verifiedEmail: false, // requires mock email verification
-      registeredAt: new Date().toISOString(),
-      loginCount: 1,
-    };
+      const newUserId = data.user.id;
+      const randomRefCode = name.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, 'PV') + Math.floor(100 + Math.random() * 900);
 
-    db.users.push(newUser);
+      // Verify referrer if provided
+      let referredByUserId = '';
+      if (refCode) {
+        const { data: referrer, error: refError } = await supabase
+          .from('users')
+          .select('id, name')
+          .eq('referralCode', refCode.toUpperCase())
+          .maybeSingle();
 
-    // Track referral signup connection
-    if (refCode) {
-      const referrer = db.users.find(u => u.referralCode.toUpperCase() === refCode.toUpperCase());
-      if (referrer) {
-        db.referrals.push({
-          id: `ref-${Math.floor(10000 + Math.random() * 90000)}`,
-          referrerId: referrer.id,
-          refereeId: newUser.id,
-          refereeName: newUser.name,
+        if (refError || !referrer) {
+          setError("Invalid referral code. Leave blank if you don't have one.");
+          return;
+        }
+        referredByUserId = referrer.id;
+      }
+
+      // Create user record in matching table
+      const newUser = {
+        id: newUserId,
+        name,
+        email,
+        role: 'user',
+        walletBalance: 0,
+        totalDeposits: 0,
+        totalWithdrawals: 0,
+        totalEarnings: 0,
+        referralEarnings: 0,
+        activeInvestmentsAmount: 0,
+        kycStatus: 'unverified',
+        status: 'active',
+        referralCode: randomRefCode,
+        referredBy: refCode || undefined,
+        tfaEnabled: false,
+        verifiedEmail: true,
+        registeredAt: new Date().toISOString(),
+        loginCount: 1,
+      };
+
+      const { error: insertError } = await supabase.from('users').insert(newUser);
+      if (insertError) {
+        setError(insertError.message);
+        return;
+      }
+
+      // Track referral signup connection
+      if (referredByUserId) {
+        const refId = `ref-${Math.floor(10000 + Math.random() * 90000)}`;
+        await supabase.from('referrals').insert({
+          id: refId,
+          referrerId: referredByUserId,
+          refereeId: newUserId,
+          refereeName: name,
           date: new Date().toISOString(),
           status: 'active'
         });
-        
+
         // Notify referrer
-        db.notifications.push({
+        await supabase.from('notifications').insert({
           id: `notif-${Math.floor(10000 + Math.random() * 90000)}`,
-          userId: referrer.id,
+          userId: referredByUserId,
           title: 'New Referral Registered',
-          message: `${newUser.name} has signed up using your referral code. You will earn 10% commission when they invest.`,
+          message: `${name} has signed up using your referral code. You will earn 10% commission when they invest.`,
           date: new Date().toISOString(),
           read: false
         });
       }
+
+      // Welcome notification
+      await supabase.from('notifications').insert({
+        id: `notif-${Math.floor(10000 + Math.random() * 90000)}`,
+        userId: newUserId,
+        title: 'Welcome to PrimeVest Capital',
+        message: 'Welcome! Complete your profile settings, submit KYC, and fund your wallet to begin active investments.',
+        date: new Date().toISOString(),
+        read: false
+      });
+
+      // Synchronize database state
+      await pullFromSupabase();
+
+      localStorage.setItem('primevest_active_user', newUserId);
+      setSuccess('Registration successful! Directing to email verification.');
+
+      setTimeout(() => {
+        setView('verify');
+      }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during registration.');
     }
-
-    // Welcome notification
-    db.notifications.push({
-      id: `notif-${Math.floor(10000 + Math.random() * 90000)}`,
-      userId: newUser.id,
-      title: 'Welcome to PrimeVest Capital',
-      message: 'Welcome! Complete your profile settings, submit KYC, and fund your wallet to begin active investments.',
-      date: new Date().toISOString(),
-      read: false
-    });
-
-    localStorage.setItem('primevest_db_state', JSON.stringify(db));
-    localStorage.setItem('primevest_active_user', newUser.id);
-    
-    setSuccess('Registration successful! Directing to email verification.');
-    
-    setTimeout(() => {
-      setView('verify');
-    }, 1500);
   };
 
-  const handleResetPasswordRequest = (e: React.FormEvent) => {
+  const handleResetPasswordRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    const db = getDbState();
-    const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    
-    if (!user) {
-      setError('We could not find an account with that email address.');
-      return;
-    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/#forgot`
+      });
 
-    setResetCodeSent(true);
-    setSuccess('Demo Mode: A secure password reset link has been dispatched to your email.');
+      if (error) {
+        // Fallback for development
+        const db = getDbState();
+        const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (!user) {
+          setError('We could not find an account with that email address.');
+          return;
+        }
+        setResetCodeSent(true);
+        setSuccess('Demo Mode: A secure password reset link has been dispatched to your email.');
+        return;
+      }
+
+      setResetCodeSent(true);
+      setSuccess('A secure password reset link has been dispatched to your email.');
+    } catch (err: any) {
+      setError(err.message || 'Error sending password reset email.');
+    }
   };
 
-  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -218,50 +417,78 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
       return;
     }
 
-    const db = getDbState();
-    const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    
-    if (!user) {
-      setError('An error occurred. Please restart the process.');
-      return;
-    }
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
 
-    user.password = newPassword;
-    localStorage.setItem('primevest_db_state', JSON.stringify(db));
-    
-    setSuccess('Password updated successfully! Redirecting to login.');
-    setTimeout(() => {
-      setView('login');
-      setResetCodeSent(false);
-      setPassword('');
-    }, 1500);
+      if (error) {
+        // Fallback for development
+        const db = getDbState();
+        const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (!user) {
+          setError('An error occurred. Please restart the process.');
+          return;
+        }
+        user.password = newPassword;
+        localStorage.setItem('primevest_db_state', JSON.stringify(db));
+        setSuccess('Password updated successfully! Redirecting to login.');
+        setTimeout(() => {
+          setView('login');
+          setResetCodeSent(false);
+          setPassword('');
+        }, 1500);
+        return;
+      }
+
+      setSuccess('Password updated successfully! Redirecting to login.');
+      setTimeout(() => {
+        setView('login');
+        setResetCodeSent(false);
+        setPassword('');
+      }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Error updating password.');
+    }
   };
 
-  const handleEmailVerifySubmit = (e: React.FormEvent) => {
+  const handleEmailVerifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    // For demo, any code is approved
     const activeUserId = localStorage.getItem('primevest_active_user');
     if (!activeUserId) {
       setError('Session expired. Please register again.');
       return;
     }
 
-    const db = getDbState();
-    db.users = db.users.map(u => {
-      if (u.id === activeUserId) {
-        return { ...u, verifiedEmail: true };
-      }
-      return u;
-    });
+    try {
+      // In Supabase, if the user registers, their email is verified once they follow link or if auto-verified.
+      // Here we set the flag in our custom users table.
+      await supabase
+        .from('users')
+        .update({ verifiedEmail: true })
+        .eq('id', activeUserId);
 
-    localStorage.setItem('primevest_db_state', JSON.stringify(db));
-    setSuccess('Email address verified successfully! Welcome to your Investor Portal.');
-    setTimeout(() => {
-      onAuthSuccess(activeUserId);
-    }, 1500);
+      await pullFromSupabase();
+      setSuccess('Email address verified successfully! Welcome to your Investor Portal.');
+      setTimeout(() => {
+        onAuthSuccess(activeUserId);
+      }, 1500);
+    } catch (err: any) {
+      // Fallback
+      const db = getDbState();
+      db.users = db.users.map(u => {
+        if (u.id === activeUserId) {
+          return { ...u, verifiedEmail: true };
+        }
+        return u;
+      });
+      localStorage.setItem('primevest_db_state', JSON.stringify(db));
+      setSuccess('Email address verified successfully! Welcome to your Investor Portal.');
+      setTimeout(() => {
+        onAuthSuccess(activeUserId);
+      }, 1500);
+    }
   };
 
   return (

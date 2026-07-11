@@ -2,14 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, Shield, Wallet, ArrowDownCircle, ArrowUpCircle, 
   Clock, Share2, Copy, Check, Info, Settings, AlertCircle, 
-  Bell, ChevronRight, User, Key, RefreshCw, Calendar, Eye,
-  CheckSquare, Award, Lock, ShieldAlert
+  Bell, ChevronRight, User, Key, RefreshCw, Calendar, Eye
 } from 'lucide-react';
 import { User as UserType, Transaction, Investment, Notification, InvestmentPlan } from '../types';
 import { 
   getDbState, requestDeposit, requestWithdrawal, investInPlan, 
-  forceSimulatePayout, submitKyc, updateProfile, saveDbState,
-  claimDailyReward
+  forceSimulatePayout, submitKyc, updateProfile, saveDbState 
 } from '../db';
 import Footer from './Footer';
 import TransactionHistory from './TransactionHistory';
@@ -88,13 +86,8 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
 
   // Profile forms
   const [profileName, setProfileName] = useState('');
-  const [profilePassword, setProfilePassword] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
-  const [profileCountry, setProfileCountry] = useState('');
-  const [profileAvatar, setProfileAvatar] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
-  const [profileNotifEmail, setProfileNotifEmail] = useState(true);
-  const [profileNotifSms, setProfileNotifSms] = useState(false);
-  const [profileNotifPush, setProfileNotifPush] = useState(true);
+  const [profilePassword, setProfilePassword] = useState('');
 
   // User withdrawal payout settings states
   const [withdrawalBankName, setWithdrawalBankName] = useState('');
@@ -111,33 +104,17 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
     if (user) {
       setCurrentUser(user);
       setProfileName(user.name);
+      setProfilePhone(user.phone || '');
       setNewReferralCode(user.referralCode);
       setWithdrawalBankName(user.withdrawalBankName || '');
       setWithdrawalAccountName(user.withdrawalAccountName || '');
       setWithdrawalAccountNumber(user.withdrawalAccountNumber || '');
-      setProfilePhone(user.phone || '');
-      setProfileCountry(user.country || '');
-      setProfileAvatar(user.profilePicture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
-      if (user.notificationPreferences) {
-        setProfileNotifEmail(user.notificationPreferences.email !== false);
-        setProfileNotifSms(user.notificationPreferences.sms === true);
-        setProfileNotifPush(user.notificationPreferences.push !== false);
-      }
     }
     
     // Count unread notifications
     const unread = currentDb.notifications.filter(n => (n.userId === userId || n.userId === 'all') && !n.read).length;
     setUnreadCount(unread);
   }, [userId, activeTab]);
-
-  // Automatically use saved account details when withdrawalMethod is 'bank'
-  useEffect(() => {
-    if (withdrawalMethod === 'bank' && currentUser?.withdrawalBankName) {
-      setWithdrawDetails(`${currentUser.withdrawalBankName}, ${currentUser.withdrawalAccountName}, ${currentUser.withdrawalAccountNumber}`);
-    } else {
-      setWithdrawDetails('');
-    }
-  }, [withdrawalMethod, currentUser?.withdrawalBankName, currentUser?.withdrawalAccountName, currentUser?.withdrawalAccountNumber]);
 
   const refreshState = () => {
     const currentDb = getDbState();
@@ -322,18 +299,7 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
     setSettingsError('');
     setSettingsSuccess('');
 
-    const updates: Partial<UserType> = { 
-      name: profileName,
-      phone: profilePhone,
-      country: profileCountry,
-      profilePicture: profileAvatar,
-      notificationPreferences: {
-        email: profileNotifEmail,
-        sms: profileNotifSms,
-        push: profileNotifPush
-      }
-    };
-
+    const updates: Partial<UserType> = { name: profileName, phone: profilePhone };
     if (profilePassword.trim()) {
       if (profilePassword.length < 6) {
         setSettingsError('Security password must be at least 6 characters.');
@@ -360,38 +326,14 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
       return;
     }
 
-    if (!/^\d{10}$/.test(withdrawalAccountNumber.trim())) {
-      setBankError('Account number format is invalid. Must be exactly 10 digits.');
-      return;
-    }
-
     const updatedDb = updateProfile(userId, {
       withdrawalBankName: withdrawalBankName.trim(),
       withdrawalAccountName: withdrawalAccountName.trim(),
       withdrawalAccountNumber: withdrawalAccountNumber.trim(),
-      bankVerificationStatus: 'pending' // queue for compliance verification
     });
     setDb(updatedDb);
-    setBankSuccess('Payout bank account details registered and queued for compliance verification.');
+    setBankSuccess('Payout bank account details registered successfully.');
     refreshState();
-  };
-
-  const handleRemoveBankDetails = () => {
-    if (window.confirm('Are you sure you want to remove your saved withdrawal bank details?')) {
-      const updatedDb = updateProfile(userId, {
-        withdrawalBankName: '',
-        withdrawalAccountName: '',
-        withdrawalAccountNumber: '',
-        bankVerificationStatus: 'unverified',
-        bankAdminNote: ''
-      });
-      setDb(updatedDb);
-      setWithdrawalBankName('');
-      setWithdrawalAccountName('');
-      setWithdrawalAccountNumber('');
-      setBankSuccess('Saved payout bank account successfully removed.');
-      refreshState();
-    }
   };
 
   // 2FA Security Toggle
@@ -400,30 +342,6 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
     const updatedDb = updateProfile(userId, { tfaEnabled: nextState });
     setDb(updatedDb);
     refreshState();
-  };
-
-  // Daily Tasks state and helper
-  const [taskSuccessMessage, setTaskSuccessMessage] = useState('');
-  const [taskErrorMessage, setTaskErrorMessage] = useState('');
-  const [claimingTaskId, setClaimingTaskId] = useState('');
-
-  const handleClaimTaskReward = (taskId: string) => {
-    setTaskSuccessMessage('');
-    setTaskErrorMessage('');
-    setClaimingTaskId(taskId);
-
-    // Simulate compliance confirmation
-    setTimeout(() => {
-      const result = claimDailyReward(userId, taskId);
-      setClaimingTaskId('');
-      if (result.success) {
-        setTaskSuccessMessage(result.message);
-        setDb(result.state);
-        refreshState();
-      } else {
-        setTaskErrorMessage(result.message);
-      }
-    }, 1200);
   };
 
   // Notifications Helpers
@@ -566,22 +484,6 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
               <span className="flex items-center gap-3">
                 <Share2 className="w-4.5 h-4.5" /> Referral Network
               </span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('tasks')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition flex items-center justify-between ${
-                activeTab === 'tasks' ? 'bg-yellow-950/20 text-yellow-500 border-l-2 border-yellow-500' : 'text-zinc-400 hover:bg-zinc-950 hover:text-white'
-              }`}
-            >
-              <span className="flex items-center gap-3">
-                <CheckSquare className="w-4.5 h-4.5" /> Daily Tasks Board
-              </span>
-              {db.tasks && db.tasks.filter(t => t.active && new Date(t.expiryDate) > new Date() && !(db.taskClaims || []).some(c => c.taskId === t.id && c.userId === userId)).length > 0 && (
-                <span className="bg-yellow-500 text-black font-mono font-bold text-[10px] px-1.5 py-0.5 rounded-full shrink-0">
-                  {db.tasks.filter(t => t.active && new Date(t.expiryDate) > new Date() && !(db.taskClaims || []).some(c => c.taskId === t.id && c.userId === userId)).length}
-                </span>
-              )}
             </button>
             <button 
               onClick={() => setActiveTab('settings')}
@@ -983,34 +885,13 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
                           </button>
                         )}
                       </div>
-                      
-                      {withdrawalMethod === 'bank' && currentUser.withdrawalBankName && (
-                        <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg space-y-1.5 text-xs text-zinc-400">
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-gray-200">Default Saved Bank:</span>
-                            <span className={`text-[9px] uppercase px-2 py-0.5 rounded font-mono font-bold border ${
-                              currentUser.bankVerificationStatus === 'verified' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/10' :
-                              currentUser.bankVerificationStatus === 'pending' ? 'bg-yellow-950/40 text-yellow-400 border-yellow-500/10' :
-                              'bg-zinc-900 text-zinc-400 border-zinc-800'
-                            }`}>
-                              {currentUser.bankVerificationStatus || 'unverified'}
-                            </span>
-                          </div>
-                          <div className="font-mono text-zinc-400 space-y-0.5 text-[11px]">
-                            <p className="font-bold text-yellow-500">{currentUser.withdrawalBankName}</p>
-                            <p>Account No: {currentUser.withdrawalAccountNumber}</p>
-                            <p>Holder: {currentUser.withdrawalAccountName}</p>
-                          </div>
-                        </div>
-                      )}
-
                       <textarea 
                         required
                         rows={2}
                         placeholder={withdrawalMethod === 'bank' ? "Bank Name, Account Name, Account Number (10 digits)" : "Your TRC20 USDT Wallet Address"}
                         value={withdrawDetails}
                         onChange={(e) => setWithdrawDetails(e.target.value)}
-                        className="w-full bg-black border border-emerald-500/10 rounded px-4 py-2 text-xs focus:border-emerald-500 focus:outline-none transition resize-none text-zinc-300 placeholder-zinc-700 font-semibold font-mono"
+                        className="w-full bg-black border border-emerald-500/10 rounded px-4 py-2 text-xs focus:border-emerald-500 focus:outline-none transition resize-none text-zinc-300 placeholder-zinc-700 font-semibold"
                       />
                     </div>
 
@@ -1451,176 +1332,6 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
 
 
           {/* ============================================================ */}
-          {/* DAILY TASK BOARD TAB */}
-          {/* ============================================================ */}
-          {activeTab === 'tasks' && (
-            <div className="space-y-6">
-              
-              {/* Daily tasks stats overview */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-900/60 space-y-1">
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">Completed Tasks</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold font-mono text-gray-200">
-                      {(db.taskClaims || []).filter(c => c.userId === userId).length}
-                    </span>
-                    <span className="text-xs text-zinc-500">claimed</span>
-                  </div>
-                </div>
-
-                <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-900/60 space-y-1">
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">Total Claimed Earnings</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold font-mono text-yellow-500">
-                      ₦{(db.taskClaims || []).filter(c => c.userId === userId).reduce((sum, c) => sum + c.amount, 0).toLocaleString()}
-                    </span>
-                    <span className="text-xs text-zinc-500">credited</span>
-                  </div>
-                </div>
-
-                <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-900/60 space-y-1">
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">Available Pool</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold font-mono text-emerald-400">
-                      {(db.tasks || []).filter(t => t.active && new Date(t.expiryDate) > new Date() && !(db.taskClaims || []).some(c => c.taskId === t.id && c.userId === userId)).length}
-                    </span>
-                    <span className="text-xs text-zinc-500">active now</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Feedback messages */}
-              {taskSuccessMessage && (
-                <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded-lg text-xs font-semibold flex items-center gap-2 animate-fadeIn">
-                  <Award className="w-5 h-5 animate-bounce shrink-0" />
-                  <div>
-                    <p className="font-bold text-gray-200">Reward Claims Secured!</p>
-                    <p className="text-zinc-300 font-sans mt-0.5">{taskSuccessMessage}</p>
-                  </div>
-                </div>
-              )}
-
-              {taskErrorMessage && (
-                <div className="p-4 bg-red-950/40 border border-red-500/30 text-red-400 rounded-lg text-xs font-semibold">
-                  {taskErrorMessage}
-                </div>
-              )}
-
-              {/* Task Cards List */}
-              <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-900 space-y-4">
-                <div className="flex justify-between items-center pb-4 border-b border-zinc-900/60">
-                  <div>
-                    <h4 className="font-semibold text-gray-200">Daily Affiliate & Engagement Toggles</h4>
-                    <p className="text-xs text-zinc-500">Complete tasks published by administrative desks to instantly disburse extra capital to your wallet.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  {(db.tasks || []).filter(t => t.active && new Date(t.expiryDate) > new Date()).length === 0 ? (
-                    <div className="text-center py-12 text-zinc-600 font-mono text-xs">
-                      No active daily engagement tasks are published right now. Check back shortly.
-                    </div>
-                  ) : (
-                    (db.tasks || [])
-                      .filter(t => t.active && new Date(t.expiryDate) > new Date())
-                      .map((task) => {
-                        const isClaimed = (db.taskClaims || []).some(c => c.taskId === task.id && c.userId === userId);
-                        const isClaiming = claimingTaskId === task.id;
-
-                        return (
-                          <div 
-                            key={task.id} 
-                            className={`p-5 rounded-lg border transition-all duration-300 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${
-                              isClaimed 
-                                ? 'bg-zinc-900/20 border-zinc-900 text-zinc-500' 
-                                : 'bg-black border-zinc-850 hover:border-yellow-500/20'
-                            }`}
-                          >
-                            <div className="space-y-1.5 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-mono uppercase bg-yellow-950/40 text-yellow-500 px-2.5 py-0.5 rounded-full border border-yellow-500/10">
-                                  {task.platformType || 'social'}
-                                </span>
-                                {isClaimed && (
-                                  <span className="text-[10px] font-mono uppercase bg-emerald-950/40 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/10">
-                                    Completed & Claimed
-                                  </span>
-                                )}
-                              </div>
-                              <h5 className={`font-bold text-sm ${isClaimed ? 'text-zinc-500 line-through' : 'text-gray-200'}`}>
-                                {task.title}
-                              </h5>
-                              <p className="text-xs text-zinc-500 leading-relaxed font-sans max-w-2xl">
-                                {task.description}
-                              </p>
-                              
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-mono text-zinc-500 pt-1">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-3.5 h-3.5" /> Expires: {new Date(task.expiryDate).toLocaleDateString()}
-                                </span>
-                                <span className="text-yellow-500 font-bold">
-                                  Reward: ₦{task.rewardAmount.toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0 pt-2 md:pt-0">
-                              {/* External link button */}
-                              {task.externalLink && !isClaimed && (
-                                <a 
-                                  href={task.externalLink} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-xs font-semibold text-zinc-300 rounded border border-zinc-800 hover:text-white transition flex items-center gap-2 justify-center flex-1 md:flex-none"
-                                >
-                                  {task.buttonText || 'Execute Task'}
-                                  <ChevronRight className="w-3 h-3" />
-                                </a>
-                              )}
-
-                              {isClaimed ? (
-                                <button 
-                                  disabled
-                                  className="w-full md:w-auto px-4 py-2 bg-zinc-950 border border-zinc-900 text-zinc-600 text-xs font-semibold rounded cursor-not-allowed flex items-center gap-1.5 justify-center"
-                                >
-                                  <Check className="w-4 h-4 text-emerald-500" />
-                                  Claimed ₦{task.rewardAmount.toLocaleString()}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleClaimTaskReward(task.id)}
-                                  disabled={isClaiming}
-                                  className={`w-full md:w-auto px-5 py-2 text-xs font-bold uppercase tracking-wider rounded transition flex items-center justify-center gap-2 cursor-pointer ${
-                                    isClaiming 
-                                      ? 'bg-zinc-800 text-zinc-500 cursor-wait' 
-                                      : 'bg-yellow-500 hover:bg-yellow-400 text-black'
-                                  }`}
-                                >
-                                  {isClaiming ? (
-                                    <>
-                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                      Verifying...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Award className="w-4 h-4" />
-                                      Claim Reward
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-
-          {/* ============================================================ */}
           {/* TAB 5: PROFILE SECURITY & KYC */}
           {/* ============================================================ */}
           {activeTab === 'settings' && (
@@ -1677,10 +1388,7 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
                 
                 {/* Info update */}
                 <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-900 space-y-6">
-                  <div className="flex items-center gap-3">
-                    <User className="w-5 h-5 text-yellow-500" />
-                    <h4 className="font-semibold text-gray-200">Profile Specifications</h4>
-                  </div>
+                  <h4 className="font-semibold text-gray-200">Profile Specifications</h4>
                   
                   {settingsError && (
                     <div className="p-3 bg-red-950/40 border border-red-500/30 text-red-400 rounded text-xs">
@@ -1694,324 +1402,142 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
                   )}
 
                   <form onSubmit={handleProfileUpdate} className="space-y-4">
-                    <div className="space-y-3">
-                      {/* Avatar Picker */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Select Profile Avatar</label>
-                        <div className="flex flex-wrap gap-2">
-                          {[
-                            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-                            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-                            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-                            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-                            'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'
-                          ].map((av, index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={() => setProfileAvatar(av)}
-                              className={`w-11 h-11 rounded-full overflow-hidden border-2 transition ${
-                                profileAvatar === av ? 'border-yellow-500 scale-105 shadow-md shadow-yellow-500/20' : 'border-zinc-800 hover:border-zinc-500'
-                              }`}
-                            >
-                              <img src={av} alt={`Avatar ${index + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            </button>
-                          ))}
-                        </div>
-                        {/* Custom photo url input */}
-                        <div className="space-y-1">
-                          <input
-                            type="url"
-                            placeholder="Or enter custom Unsplash image URL"
-                            value={profileAvatar}
-                            onChange={(e) => setProfileAvatar(e.target.value)}
-                            className="w-full bg-black border border-zinc-900 rounded px-3 py-1.5 text-xs focus:border-yellow-500 focus:outline-none text-zinc-400 font-mono"
-                          />
-                        </div>
-                      </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Legal Name</label>
+                      <input 
+                        type="text"
+                        required
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition"
+                      />
+                    </div>
 
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Phone Number</label>
+                      <input 
+                        type="tel"
+                        placeholder="e.g. +234 812 345 6789"
+                        value={profilePhone}
+                        onChange={(e) => setProfilePhone(e.target.value)}
+                        className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Change Security Password</label>
+                      <input 
+                        type="password"
+                        placeholder="Leave blank to preserve current"
+                        value={profilePassword}
+                        onChange={(e) => setProfilePassword(e.target.value)}
+                        className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-mono"
+                      />
+                    </div>
+
+                    <button 
+                      type="submit"
+                      className="px-5 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold text-xs uppercase tracking-wider rounded transition"
+                    >
+                      Apply Changes
+                    </button>
+                  </form>
+                </div>
+
+                {/* 2FA Security Center */}
+                <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-900 space-y-6 flex flex-col justify-between">
+                  <div>
+                    <h4 className="font-semibold text-gray-200 mb-2">Two-Factor Authentication (2FA)</h4>
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      Secure your investment portfolio from illegal entries. When activated, all portal log-in attempts will verify with an encrypted OTP code generated by your mobile authenticator app.
+                    </p>
+                  </div>
+
+                  <div className="py-4 border-y border-zinc-900 my-2 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-gray-200">Google Authenticator State</p>
+                      <p className="text-[10px] text-zinc-500 font-mono">Status: {currentUser.tfaEnabled ? 'SECURED' : 'UNPROTECTED'}</p>
+                    </div>
+                    <button 
+                      onClick={handleTfaToggle}
+                      className={`px-4 py-1.5 rounded text-xs font-bold font-mono transition ${
+                        currentUser.tfaEnabled ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/20' : 'bg-red-950 text-red-400 border border-red-500/20'
+                      }`}
+                    >
+                      {currentUser.tfaEnabled ? 'ENABLED' : 'DISABLED'}
+                    </button>
+                  </div>
+
+                  <p className="text-[10px] text-zinc-600 leading-relaxed font-mono">
+                    Device tokens are synchronized with Marina Mall central systems. Security resets require personal compliance requests.
+                  </p>
+                </div>
+
+                {/* Withdrawal Payout Account Form Card */}
+                <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-900 space-y-6">
+                  <div>
+                    <h4 className="font-semibold text-gray-200">Withdrawal Bank Account Specifications</h4>
+                    <p className="text-xs text-zinc-500">Configure your default payout destination details. Withdrawals will be sent to this specified account.</p>
+                  </div>
+
+                  {bankError && (
+                    <div className="p-3 bg-red-950/40 border border-red-500/30 text-red-400 rounded text-xs">
+                      {bankError}
+                    </div>
+                  )}
+                  {bankSuccess && (
+                    <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded text-xs font-semibold">
+                      {bankSuccess}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleWithdrawalAccountUpdate} className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Payout Bank Name</label>
+                      <input 
+                        type="text"
+                        required
+                        placeholder="e.g. United Bank for Africa (UBA)"
+                        value={withdrawalBankName}
+                        onChange={(e) => setWithdrawalBankName(e.target.value)}
+                        className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-semibold text-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Full Name</label>
+                        <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Account Holder Name</label>
                         <input 
                           type="text"
                           required
-                          value={profileName}
-                          onChange={(e) => setProfileName(e.target.value)}
-                          className="w-full bg-black border border-zinc-850 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-semibold text-white"
+                          placeholder="e.g. John Doe"
+                          value={withdrawalAccountName}
+                          onChange={(e) => setWithdrawalAccountName(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-semibold text-white"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-xs font-mono uppercase tracking-widest text-zinc-500">Email Address (Read-Only)</label>
+                        <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Bank Account Number</label>
                         <input 
-                          type="email"
-                          disabled
-                          value={currentUser.email}
-                          className="w-full bg-zinc-950 border border-zinc-900/60 rounded px-4 py-2 text-sm text-zinc-500 cursor-not-allowed font-mono"
+                          type="text"
+                          required
+                          maxLength={10}
+                          placeholder="e.g. 1012948194"
+                          value={withdrawalAccountNumber}
+                          onChange={(e) => setWithdrawalAccountNumber(e.target.value.replace(/\D/g, ''))}
+                          className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-mono font-semibold text-white"
                         />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Phone Number</label>
-                          <input 
-                            type="text"
-                            placeholder="e.g. +234 80 1234 5678"
-                            value={profilePhone}
-                            onChange={(e) => setProfilePhone(e.target.value)}
-                            className="w-full bg-black border border-zinc-850 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-mono text-white"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Country</label>
-                          <input 
-                            type="text"
-                            placeholder="e.g. Nigeria"
-                            value={profileCountry}
-                            onChange={(e) => setProfileCountry(e.target.value)}
-                            className="w-full bg-black border border-zinc-850 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition text-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Change Security Password</label>
-                        <input 
-                          type="password"
-                          placeholder="Leave blank to preserve current"
-                          value={profilePassword}
-                          onChange={(e) => setProfilePassword(e.target.value)}
-                          className="w-full bg-black border border-zinc-850 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-mono text-white"
-                        />
-                      </div>
-
-                      {/* Notification Preferences Section */}
-                      <div className="p-4 rounded-lg bg-black/40 border border-zinc-900 space-y-3">
-                        <h5 className="text-xs font-bold text-gray-300 font-mono uppercase tracking-wider flex items-center gap-2">
-                          <Bell className="w-3.5 h-3.5 text-yellow-500" />
-                          Notification Preferences
-                        </h5>
-                        
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2.5 text-xs text-zinc-400 hover:text-white cursor-pointer select-none">
-                            <input 
-                              type="checkbox"
-                              checked={profileNotifEmail}
-                              onChange={(e) => setProfileNotifEmail(e.target.checked)}
-                              className="accent-yellow-500"
-                            />
-                            Email Payout & Capital Receipts
-                          </label>
-
-                          <label className="flex items-center gap-2.5 text-xs text-zinc-400 hover:text-white cursor-pointer select-none">
-                            <input 
-                              type="checkbox"
-                              checked={profileNotifSms}
-                              onChange={(e) => setProfileNotifSms(e.target.checked)}
-                              className="accent-yellow-500"
-                            />
-                            SMS Transaction Dispatches
-                          </label>
-
-                          <label className="flex items-center gap-2.5 text-xs text-zinc-400 hover:text-white cursor-pointer select-none">
-                            <input 
-                              type="checkbox"
-                              checked={profileNotifPush}
-                              onChange={(e) => setProfileNotifPush(e.target.checked)}
-                              className="accent-yellow-500"
-                            />
-                            Browser Security & Task Alerts
-                          </label>
-                        </div>
                       </div>
                     </div>
 
                     <button 
                       type="submit"
-                      className="w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold text-xs uppercase tracking-wider rounded transition cursor-pointer"
+                      className="px-5 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold text-xs uppercase tracking-wider rounded transition"
                     >
-                      Save Profile & Preferences
+                      Save Payout Account
                     </button>
                   </form>
-                </div>
-
-                {/* Right side: 2FA & Withdrawal Bank account Specifications */}
-                <div className="space-y-6">
-                  {/* 2FA Security Center */}
-                  <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-900 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <ShieldAlert className="w-5 h-5 text-yellow-500" />
-                      <h4 className="font-semibold text-gray-200">Two-Factor Authentication (2FA)</h4>
-                    </div>
-                    <p className="text-xs text-zinc-500 leading-relaxed">
-                      Secure your investment portfolio from unauthorized withdrawals. When activated, all critical payout portal actions will verify with our simulated authenticator secure handshake.
-                    </p>
-
-                    <div className="py-4 border-y border-zinc-900/60 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-gray-200">Authenticator Encryption State</p>
-                        <p className="text-[10px] text-zinc-500 font-mono">Status: {currentUser.tfaEnabled ? 'SECURED WITH 2FA' : 'UNPROTECTED'}</p>
-                      </div>
-                      <button 
-                        onClick={handleTfaToggle}
-                        className={`px-4 py-1.5 rounded text-xs font-bold font-mono transition cursor-pointer ${
-                          currentUser.tfaEnabled ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/20' : 'bg-red-950 text-red-400 border border-red-500/20'
-                        }`}
-                      >
-                        {currentUser.tfaEnabled ? 'ENABLED' : 'DISABLED'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Withdrawal Payout Account Form Card */}
-                  <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-900 space-y-6">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1">
-                        <h4 className="font-semibold text-gray-200">Withdrawal Bank Details</h4>
-                        <p className="text-xs text-zinc-500">Allowing investors to preserve a primary payout bank. This destination is saved for automated withdrawals.</p>
-                      </div>
-                      
-                      {/* Saved status indicators */}
-                      {currentUser.withdrawalBankName && (
-                        <span className={`text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded border shrink-0 ${
-                          currentUser.bankVerificationStatus === 'verified' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/20' :
-                          currentUser.bankVerificationStatus === 'pending' ? 'bg-yellow-950/40 text-yellow-400 border-yellow-500/20' :
-                          'bg-red-950/40 text-red-400 border-red-500/20'
-                        }`}>
-                          {currentUser.bankVerificationStatus || 'unverified'}
-                        </span>
-                      )}
-                    </div>
-
-                    {currentUser.bankAdminNote && (
-                      <div className="p-3 bg-red-950/20 border border-red-500/15 rounded-lg text-xs space-y-1">
-                        <p className="font-mono font-bold text-red-400">Auditing Desk Feedback:</p>
-                        <p className="text-zinc-400 text-xs italic">"{currentUser.bankAdminNote}"</p>
-                      </div>
-                    )}
-
-                    {bankError && (
-                      <div className="p-3 bg-red-950/40 border border-red-500/30 text-red-400 rounded text-xs">
-                        {bankError}
-                      </div>
-                    )}
-                    {bankSuccess && (
-                      <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded text-xs font-semibold">
-                        {bankSuccess}
-                      </div>
-                    )}
-
-                    {currentUser.bankVerificationStatus === 'verified' ? (
-                      /* LOCKED CARD VIEW WHEN VERIFIED */
-                      <div className="p-5 bg-zinc-900/30 border border-emerald-500/10 rounded-xl space-y-4">
-                        <div className="flex gap-3 text-xs leading-relaxed text-zinc-400">
-                          <Lock className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="font-bold text-gray-200">Payout Destination Locked</p>
-                            <p className="mt-0.5">This payout account is fully verified. Direct modification is prohibited to guard against security breaches. Contact the compliance helpdesk to initiate modifications.</p>
-                          </div>
-                        </div>
-
-                        <div className="pt-3 border-t border-zinc-900 grid grid-cols-1 gap-2 font-mono text-[11px] text-zinc-400">
-                          <div>
-                            <span className="text-zinc-600 uppercase text-[9px] block tracking-widest">Saved Bank Partner</span>
-                            <span className="font-bold text-gray-200">{currentUser.withdrawalBankName}</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 mt-1">
-                            <div>
-                              <span className="text-zinc-600 uppercase text-[9px] block tracking-widest">Account Number</span>
-                              <span className="font-bold text-gray-200 font-mono">{currentUser.withdrawalAccountNumber}</span>
-                            </div>
-                            <div>
-                              <span className="text-zinc-600 uppercase text-[9px] block tracking-widest">Account Holder</span>
-                              <span className="font-bold text-gray-200">{currentUser.withdrawalAccountName}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      /* ACTIVE BANK FORM */
-                      <form onSubmit={handleWithdrawalAccountUpdate} className="space-y-4">
-                        <div className="space-y-1">
-                          <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Payout Bank Name</label>
-                          <select 
-                            value={withdrawalBankName}
-                            onChange={(e) => setWithdrawalBankName(e.target.value)}
-                            className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-semibold text-white"
-                          >
-                            <option value="">Select Local Bank Partner</option>
-                            <option value="Access Bank Plc">Access Bank Plc</option>
-                            <option value="Citibank Nigeria Limited">Citibank Nigeria Limited</option>
-                            <option value="Ecobank Nigeria Plc">Ecobank Nigeria Plc</option>
-                            <option value="Fidelity Bank Plc">Fidelity Bank Plc</option>
-                            <option value="First City Monument Bank Limited">First City Monument Bank Limited</option>
-                            <option value="First Bank of Nigeria Limited">First Bank of Nigeria Limited</option>
-                            <option value="Guaranty Trust Holding Company Plc (GTBank)">Guaranty Trust Holding Company Plc (GTBank)</option>
-                            <option value="Heritage Banking Company Limited">Heritage Banking Company Limited</option>
-                            <option value="Keystone Bank Limited">Keystone Bank Limited</option>
-                            <option value="Optimis Bank">Optimis Bank</option>
-                            <option value="Polaris Bank Limited">Polaris Bank Limited</option>
-                            <option value="Providus Bank Limited">Providus Bank Limited</option>
-                            <option value="Stanbic IBTC Bank Plc">Stanbic IBTC Bank Plc</option>
-                            <option value="Standard Chartered Bank Nigeria Limited">Standard Chartered Bank Nigeria Limited</option>
-                            <option value="Sterling Bank Plc">Sterling Bank Plc</option>
-                            <option value="SunTrust Bank Nigeria Limited">SunTrust Bank Nigeria Limited</option>
-                            <option value="Union Bank of Nigeria Plc">Union Bank of Nigeria Plc</option>
-                            <option value="United Bank for Africa Plc (UBA)">United Bank for Africa Plc (UBA)</option>
-                            <option value="Unity Bank Plc">Unity Bank Plc</option>
-                            <option value="Wema Bank Plc">Wema Bank Plc</option>
-                            <option value="Zenith Bank Plc">Zenith Bank Plc</option>
-                          </select>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Account Holder Name</label>
-                            <input 
-                              type="text"
-                              required
-                              placeholder="e.g. John Doe"
-                              value={withdrawalAccountName}
-                              onChange={(e) => setWithdrawalAccountName(e.target.value)}
-                              className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-semibold text-white"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-mono uppercase tracking-widest text-zinc-400">Bank Account Number</label>
-                            <input 
-                              type="text"
-                              required
-                              maxLength={10}
-                              placeholder="10-digit Nuban No"
-                              value={withdrawalAccountNumber}
-                              onChange={(e) => setWithdrawalAccountNumber(e.target.value.replace(/\D/g, ''))}
-                              className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition font-mono font-semibold text-white"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 pt-2">
-                          <button 
-                            type="submit"
-                            className="flex-1 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold text-xs uppercase tracking-wider rounded transition cursor-pointer"
-                          >
-                            Save Bank Details
-                          </button>
-                          {currentUser.withdrawalBankName && (
-                            <button 
-                              type="button"
-                              onClick={handleRemoveBankDetails}
-                              className="px-4 py-2 bg-zinc-900 border border-zinc-850 text-xs text-red-400 hover:text-red-300 hover:bg-zinc-850 rounded transition cursor-pointer font-semibold uppercase tracking-wider"
-                            >
-                              Remove Saved Details
-                            </button>
-                          )}
-                        </div>
-                      </form>
-                    )}
-                  </div>
                 </div>
               </div>
 

@@ -4,7 +4,8 @@ import LandingPage from './components/LandingPage';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import AdminPanel from './components/AdminPanel';
-import { getDbState, simulateROI } from './db';
+import { getDbState, simulateROI, pullFromSupabase } from './db';
+import { supabase } from './lib/supabase';
 
 export default function App() {
   const getPageFromHash = () => {
@@ -24,6 +25,23 @@ export default function App() {
     // Perform simulated ROI return allocations upon application load
     const updatedDb = simulateROI();
     setDbState(updatedDb);
+
+    // Pull the latest live database state from Supabase
+    const syncSupabase = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          localStorage.setItem('primevest_active_user', session.user.id);
+          setActiveUserId(session.user.id);
+        }
+        await pullFromSupabase();
+        const finalDb = simulateROI();
+        setDbState(finalDb);
+      } catch (err) {
+        console.error('Failed to pull from Supabase on mount:', err);
+      }
+    };
+    syncSupabase();
 
     const savedUser = localStorage.getItem('primevest_active_user');
     let initialPage = getPageFromHash() || 'home';
@@ -93,7 +111,12 @@ export default function App() {
     handleNavigate('dashboard');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Failed to sign out from Supabase Auth:', e);
+    }
     localStorage.removeItem('primevest_active_user');
     setActiveUserId(null);
     handleNavigate('home');
