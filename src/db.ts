@@ -1,47 +1,3 @@
-// ==========================================
-// TEMPORARY BANK VERIFICATION FUNCTIONS
-// ==========================================
-
-export function adminVerifyBankDetails(adminId: string, userId: string) {
-  console.log("Temporary adminVerifyBankDetails()", adminId, userId);
-  return getDbState();
-}
-
-export function adminEditUserBankDetails(
-  adminId: string,
-  userId: string,
-  bankName: string,
-  accountName: string,
-  accountNumber: string
-) {
-  console.log(
-    "Temporary adminEditUserBankDetails()",
-    adminId,
-    userId,
-    bankName,
-    accountName,
-    accountNumber
-  );
-  return getDbState();
-}
-// ==========================================
-// TEMPORARY DAILY TASK FUNCTIONS
-// ==========================================
-
-export function adminCreateTask(adminId: string, task: any) {
-  console.log("Temporary adminCreateTask()", adminId, task);
-  return getDbState();
-}
-
-export function adminUpdateTask(adminId: string, taskId: string, updates: any) {
-  console.log("Temporary adminUpdateTask()", adminId, taskId, updates);
-  return getDbState();
-}
-
-export function adminDeleteTask(adminId: string, taskId: string) {
-  console.log("Temporary adminDeleteTask()", adminId, taskId);
-  return getDbState();
-}
 import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan } from './types';
 import { supabase } from './lib/supabase';
 
@@ -54,7 +10,7 @@ interface DbState {
   auditLogs: AuditLog[];
   plans: InvestmentPlan[];
   referralRewardsEnabled: boolean;
-  referralCommissionRate: number; // e.g. 10 for 10%
+  referralCommissionRate: number;
   companyBankName: string;
   companyAccountName: string;
   companyAccountNumber: string;
@@ -65,7 +21,7 @@ interface DbState {
   inquiriesDeskPhone: string;
 }
 
-// Initial seed plans
+// Production investment plans
 const defaultPlans: InvestmentPlan[] = [
   { id: 'starter', name: 'Starter', deposit: 52000, dailyReturn: 2000, type: 'basic', paused: false },
   { id: 'growth', name: 'Growth', deposit: 130000, dailyReturn: 5500, type: 'basic', paused: false },
@@ -73,7 +29,7 @@ const defaultPlans: InvestmentPlan[] = [
   { id: 'premium_1', name: 'Premium 1', deposit: 530000, dailyReturn: 20000, type: 'premium', paused: false },
   { id: 'premium_2', name: 'Premium 2', deposit: 850000, dailyReturn: 33500, type: 'premium', paused: false },
   { id: 'premium_3', name: 'Premium 3', deposit: 1700000, dailyReturn: 67000, type: 'premium', paused: false },
-  { id: 'elite', name: 'Elite Partner', deposit: 0, dailyReturn: 0.045, type: 'elite', minElite: 2000000, maxElite: 200000000, paused: false } // 4.5% daily return
+  { id: 'elite', name: 'Elite Partner', deposit: 0, dailyReturn: 0.045, type: 'elite', minElite: 2000000, maxElite: 200000000, paused: false }
 ];
 
 const INITIAL_STATE: DbState = {
@@ -85,7 +41,7 @@ const INITIAL_STATE: DbState = {
   auditLogs: [],
   plans: defaultPlans,
   referralRewardsEnabled: true,
-  referralCommissionRate: 10, // 10%
+  referralCommissionRate: 10,
   companyBankName: 'Access Bank Plc',
   companyAccountName: 'PrimeVest Asset clearing Trust',
   companyAccountNumber: '0842918491',
@@ -98,28 +54,23 @@ const INITIAL_STATE: DbState = {
 
 const DB_KEY = 'primevest_db_state';
 
-export function getDbState(): DbState {
-  if (typeof window === 'undefined') return INITIAL_STATE;
-  const raw = localStorage.getItem(DB_KEY);
-  if (!raw) {
-    localStorage.setItem(DB_KEY, JSON.stringify(INITIAL_STATE));
-    return INITIAL_STATE;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    return { ...INITIAL_STATE, ...parsed };
-  } catch (e) {
-    console.error('Error parsing DB state, resetting', e);
-    return INITIAL_STATE;
-  }
+// ==========================================
+// PRODUCTION STATE MANAGEMENT
+// ==========================================
+
+export async function getDbState(): Promise<DbState> {
+  // Primary: Fetch from Supabase (production database)
+  return await pullFromSupabase();
 }
 
-export function saveDbState(state: DbState) {
+export async function saveDbState(state: DbState): Promise<void> {
+  // Immediately persist to Supabase
+  await pushToSupabase(state);
+  
+  // Cache locally for offline access
   if (typeof window !== 'undefined') {
     localStorage.setItem(DB_KEY, JSON.stringify(state));
   }
-  // Asynchronously push the changes to Supabase in the background
-  pushToSupabase(state);
 }
 
 // Generate sequential IDs
@@ -127,178 +78,97 @@ function nextId(prefix: string): string {
   return `${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
 }
 
-// SIMULATE ROI: Process earnings since last payout
-export function simulateROI(): DbState {
-  const state = getDbState();
-  const now = new Date();
-  let updated = false;
+// ==========================================
+// PRODUCTION ROI PROCESSING
+// ==========================================
 
-  const updatedInvestments = state.investments.map(inv => {
-    if (inv.status !== 'active') return inv;
-
-    const startDate = new Date(inv.startDate);
-    const lastPayout = new Date(inv.lastPayoutDate);
-    
-    // Calculate how many days have elapsed since last payout.
-    // In our live simulation, we can simulate 1 real day = 1 minute for interactive testing, 
-    // OR we can calculate based on actual real days elapsed.
-    // Let's implement BOTH! 
-    // If we detect the user just started the investment, we can credit simulated payouts 
-    // based on real days elapsed, but we also credit payout every time they click "Simulate ROI Day" 
-    // or we check if at least 1 real day has elapsed (or a fast minute simulation for interactive fun).
-    // Let's calculate actual physical time elapsed, but also add a manual simulation button 
-    // in the Admin Panel or Dashboard to "Simulate 24h Payout" for testing convenience.
-    // Let's calculate standard real-time elapsed days:
-    const diffTime = Math.abs(now.getTime() - lastPayout.getTime());
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays >= 1) {
-      const payoutDays = Math.min(diffDays, inv.durationDays - inv.daysElapsed);
-      if (payoutDays > 0) {
-        const dailyPayout = inv.dailyReturn;
-        const totalPayout = dailyPayout * payoutDays;
-
-        inv.earningsAccumulated += totalPayout;
-        inv.daysElapsed += payoutDays;
-        inv.lastPayoutDate = now.toISOString();
-
-        if (inv.daysElapsed >= inv.durationDays) {
-          inv.status = 'completed';
-        }
-
-        // Credit User Wallet
-        state.users = state.users.map(u => {
-          if (u.id === inv.userId) {
-            return {
-              ...u,
-              walletBalance: u.walletBalance + totalPayout,
-              totalEarnings: u.totalEarnings + totalPayout
-            };
-          }
-          return u;
-        });
-
-        // Add transaction payout log
-        state.transactions.push({
-          id: nextId('tx'),
-          userId: inv.userId,
-          userName: state.users.find(u => u.id === inv.userId)?.name || 'Investor',
-          type: 'investment_payout',
-          amount: totalPayout,
-          status: 'approved',
-          date: now.toISOString(),
-          planName: inv.planName,
-          adminNote: `Automated Forex trading payout for ${inv.planName} Plan.`
-        });
-
-        // Notify user
-        state.notifications.push({
-          id: nextId('notif'),
-          userId: inv.userId,
-          title: 'Trading Return Credited',
-          message: `Your ${inv.planName} Plan generated ₦${totalPayout.toLocaleString()} in returns for ${payoutDays} trading day(s).`,
-          date: now.toISOString(),
-          read: false
-        });
-
-        updated = true;
-      }
-    }
-    return inv;
-  });
-
-  if (updated) {
-    state.investments = updatedInvestments;
-    // Recalculate active investments amount
-    state.users = state.users.map(u => {
-      const activeInv = state.investments
-        .filter(inv => inv.userId === u.id && inv.status === 'active')
-        .reduce((sum, inv) => sum + inv.amountInvested, 0);
-      return {
-        ...u,
-        activeInvestmentsAmount: activeInv
-      };
-    });
-    saveDbState(state);
-  }
-
-  return state;
-}
-
-// Force Simulate a 24 Hour Payout for testing
-export function forceSimulatePayout(investmentId: string): DbState {
-  const state = getDbState();
-  const now = new Date();
+/**
+ * Process ROI earnings from backend trading system
+ * In production, your backend processes trades and credits payouts
+ * This syncs those results from Supabase to the frontend
+ */
+export async function processROIPayouts(): Promise<DbState> {
+  const state = await getDbState();
   
-  state.investments = state.investments.map(inv => {
-    if (inv.id !== investmentId || inv.status !== 'active') return inv;
+  try {
+    // Fetch unprocssed ROI payouts from backend
+    const { data: payouts, error } = await supabase
+      .from('roi_payouts')
+      .select('*')
+      .eq('processed', false);
+    
+    if (error) throw error;
+    if (!payouts || payouts.length === 0) return state;
 
-    if (inv.daysElapsed < inv.durationDays) {
-      const dailyPayout = inv.dailyReturn;
-      inv.earningsAccumulated += dailyPayout;
-      inv.daysElapsed += 1;
-      inv.lastPayoutDate = now.toISOString();
+    let updated = false;
 
-      if (inv.daysElapsed >= inv.durationDays) {
-        inv.status = 'completed';
-      }
+    for (const payout of payouts) {
+      const investment = state.investments.find(inv => inv.id === payout.investment_id);
+      if (!investment) continue;
 
-      // Credit User
-      state.users = state.users.map(u => {
-        if (u.id === inv.userId) {
-          return {
-            ...u,
-            walletBalance: u.walletBalance + dailyPayout,
-            totalEarnings: u.totalEarnings + dailyPayout
-          };
-        }
-        return u;
-      });
+      const user = state.users.find(u => u.id === investment.userId);
+      if (!user) continue;
 
-      // Transaction log
+      // Credit earnings to user
+      investment.earningsAccumulated += payout.amount;
+      user.walletBalance += payout.amount;
+      user.totalEarnings += payout.amount;
+
+      // Log transaction
       state.transactions.push({
         id: nextId('tx'),
-        userId: inv.userId,
-        userName: state.users.find(u => u.id === inv.userId)?.name || 'Investor',
+        userId: user.id,
+        userName: user.name,
         type: 'investment_payout',
-        amount: dailyPayout,
+        amount: payout.amount,
         status: 'approved',
-        date: now.toISOString(),
-        planName: inv.planName,
-        adminNote: `Manual Trading Day Simulation payout.`
+        date: new Date().toISOString(),
+        planName: investment.planName,
+        adminNote: `Trading payout from ${investment.planName} Plan.`
       });
 
-      // Notification
+      // Notify user
       state.notifications.push({
         id: nextId('notif'),
-        userId: inv.userId,
-        title: 'Trading Day Return Simulated',
-        message: `Your ${inv.planName} Plan return of ₦${dailyPayout.toLocaleString()} has been credited via testing simulation.`,
-        date: now.toISOString(),
+        userId: user.id,
+        title: 'Trading Return Credited',
+        message: `Your ${investment.planName} Plan generated ₦${payout.amount.toLocaleString()} in returns.`,
+        date: new Date().toISOString(),
         read: false
       });
+
+      // Mark payout as processed
+      await supabase
+        .from('roi_payouts')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', payout.id);
+
+      updated = true;
     }
-    return inv;
-  });
 
-  // Re-calculate active investments amount
-  state.users = state.users.map(u => {
-    const activeInv = state.investments
-      .filter(inv => inv.userId === u.id && inv.status === 'active')
-      .reduce((sum, inv) => sum + inv.amountInvested, 0);
-    return {
-      ...u,
-      activeInvestmentsAmount: activeInv
-    };
-  });
+    if (updated) {
+      await saveDbState(state);
+    }
 
-  saveDbState(state);
-  return state;
+    return state;
+  } catch (error) {
+    console.error('Error processing ROI payouts:', error);
+    return state;
+  }
 }
 
-// User Actions
-export function requestDeposit(userId: string, amount: number, paymentProof: string, receiptFile?: string, receiptFileName?: string): DbState {
-  const state = getDbState();
+// ==========================================
+// USER ACTIONS
+// ==========================================
+
+export async function requestDeposit(
+  userId: string,
+  amount: number,
+  paymentProof: string,
+  receiptFile?: string,
+  receiptFileName?: string
+): Promise<DbState> {
+  const state = await getDbState();
   const user = state.users.find(u => u.id === userId);
   if (!user) return state;
 
@@ -316,12 +186,15 @@ export function requestDeposit(userId: string, amount: number, paymentProof: str
   };
 
   state.transactions.push(tx);
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function requestWithdrawal(userId: string, amount: number): { success: boolean; state: DbState; message: string } {
-  const state = getDbState();
+export async function requestWithdrawal(
+  userId: string,
+  amount: number
+): Promise<{ success: boolean; state: DbState; message: string }> {
+  const state = await getDbState();
   const user = state.users.find(u => u.id === userId);
   if (!user) return { success: false, state, message: 'User not found' };
 
@@ -334,11 +207,13 @@ export function requestWithdrawal(userId: string, amount: number): { success: bo
   }
 
   if (user.totalEarnings < amount) {
-    return { success: false, state, message: `Withdrawals can only be initiated from your earnings. Your total earnings are ₦${user.totalEarnings.toLocaleString()}` };
+    return {
+      success: false,
+      state,
+      message: `Withdrawals can only be initiated from your earnings. Your total earnings are ₦${user.totalEarnings.toLocaleString()}`
+    };
   }
 
-  // Deduct balance ONLY when admin approves, as specified in the rules:
-  // "Only after the administrator approves the withdrawal should funds be deducted from the user's wallet and marked as completed."
   const tx: Transaction = {
     id: nextId('tx'),
     userId,
@@ -346,17 +221,20 @@ export function requestWithdrawal(userId: string, amount: number): { success: bo
     type: 'withdrawal',
     amount,
     status: 'pending',
-    date: new Date().toISOString(),
+    date: new Date().toISOString()
   };
 
   state.transactions.push(tx);
-  saveDbState(state);
+  await saveDbState(state);
   return { success: true, state, message: 'Withdrawal request submitted. Awaiting administrator approval.' };
 }
 
-// Buy investment plan
-export function investInPlan(userId: string, planId: string, customAmount?: number): { success: boolean; state: DbState; message: string } {
-  const state = getDbState();
+export async function investInPlan(
+  userId: string,
+  planId: string,
+  customAmount?: number
+): Promise<{ success: boolean; state: DbState; message: string }> {
+  const state = await getDbState();
   const user = state.users.find(u => u.id === userId);
   const plan = state.plans.find(p => p.id === planId);
 
@@ -372,20 +250,27 @@ export function investInPlan(userId: string, planId: string, customAmount?: numb
       return { success: false, state, message: 'Custom investment amount is required for Elite plans' };
     }
     if (customAmount < (plan.minElite || 2000000)) {
-      return { success: false, state, message: `Minimum investment for Elite Plan is ₦${(plan.minElite || 2000000).toLocaleString()}` };
+      return {
+        success: false,
+        state,
+        message: `Minimum investment for Elite Plan is ₦${(plan.minElite || 2000000).toLocaleString()}`
+      };
     }
     if (customAmount > (plan.maxElite || 200000000)) {
-      return { success: false, state, message: `Maximum investment for Elite Plan is ₦${(plan.maxElite || 200000000).toLocaleString()}` };
+      return {
+        success: false,
+        state,
+        message: `Maximum investment for Elite Plan is ₦${(plan.maxElite || 200000000).toLocaleString()}`
+      };
     }
     amount = customAmount;
-    dailyPayout = customAmount * plan.dailyReturn; // dailyReturn acts as percentage rate for elite
+    dailyPayout = customAmount * plan.dailyReturn;
   }
 
   if (user.walletBalance < amount) {
     return { success: false, state, message: 'Insufficient wallet balance. Please fund your wallet first.' };
   }
 
-  // Deduct immediately from wallet balance to buy the plan
   user.walletBalance -= amount;
 
   const newInv: Investment = {
@@ -399,32 +284,29 @@ export function investInPlan(userId: string, planId: string, customAmount?: numb
     status: 'active',
     startDate: new Date().toISOString(),
     lastPayoutDate: new Date().toISOString(),
-    durationDays: 30, // 30 days default duration
+    durationDays: 30,
     daysElapsed: 0
   };
 
   state.investments.push(newInv);
 
-  // Record Transaction for purchase
   state.transactions.push({
     id: nextId('tx'),
     userId,
     userName: user.name,
-    type: 'investment_payout', // represents an investment debit/credit transaction
-    amount: -amount, // Negative represent funding the plan
+    type: 'investment_payout',
+    amount: -amount,
     status: 'approved',
     date: new Date().toISOString(),
     planName: plan.name,
     adminNote: `Purchased ${plan.name} Investment Plan.`
   });
 
-  // Calculate new active investments amount
   user.activeInvestmentsAmount = state.investments
     .filter(inv => inv.userId === userId && inv.status === 'active')
     .reduce((sum, inv) => sum + inv.amountInvested, 0);
 
-  // Trigger referral reward check!
-  // "Earn a 10% referral commission based on qualifying referral investments, according to platform rules."
+  // Referral rewards
   if (state.referralRewardsEnabled && user.referredBy) {
     const referrer = state.users.find(u => u.referralCode === user.referredBy || u.id === user.referredBy);
     if (referrer) {
@@ -435,7 +317,6 @@ export function investInPlan(userId: string, planId: string, customAmount?: numb
       referrer.referralEarnings += rewardAmount;
       referrer.totalEarnings += rewardAmount;
 
-      // Add referral commission transaction
       state.transactions.push({
         id: nextId('tx'),
         userId: referrer.id,
@@ -448,7 +329,6 @@ export function investInPlan(userId: string, planId: string, customAmount?: numb
         adminNote: `10% Commission from referral ${user.name}'s investment in ${plan.name} plan.`
       });
 
-      // Add notification for referrer
       state.notifications.push({
         id: nextId('notif'),
         userId: referrer.id,
@@ -469,7 +349,6 @@ export function investInPlan(userId: string, planId: string, customAmount?: numb
     read: false
   });
 
-  // Save audit log
   state.auditLogs.push({
     id: nextId('log'),
     userId,
@@ -479,20 +358,22 @@ export function investInPlan(userId: string, planId: string, customAmount?: numb
     ipAddress: '127.0.0.1'
   });
 
-  saveDbState(state);
+  await saveDbState(state);
   return { success: true, state, message: `Your investment in ${plan.name} Plan is now active!` };
 }
 
-// Admin Actions: Deposit Management
-export function approveDeposit(txId: string, adminId: string, note?: string): DbState {
-  const state = getDbState();
+// ==========================================
+// ADMIN ACTIONS: DEPOSIT MANAGEMENT
+// ==========================================
+
+export async function approveDeposit(txId: string, adminId: string, note?: string): Promise<DbState> {
+  const state = await getDbState();
   const tx = state.transactions.find(t => t.id === txId && t.type === 'deposit');
   if (!tx || tx.status !== 'pending') return state;
 
   tx.status = 'approved';
   tx.adminNote = note || 'Approved by administrator';
 
-  // Credit user wallet
   state.users = state.users.map(u => {
     if (u.id === tx.userId) {
       return {
@@ -504,7 +385,6 @@ export function approveDeposit(txId: string, adminId: string, note?: string): Db
     return u;
   });
 
-  // Notify user
   state.notifications.push({
     id: nextId('notif'),
     userId: tx.userId,
@@ -514,7 +394,6 @@ export function approveDeposit(txId: string, adminId: string, note?: string): Db
     read: false
   });
 
-  // Log admin action
   state.auditLogs.push({
     id: nextId('log'),
     userId: adminId,
@@ -524,19 +403,18 @@ export function approveDeposit(txId: string, adminId: string, note?: string): Db
     ipAddress: '127.0.0.1'
   });
 
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function rejectDeposit(txId: string, adminId: string, note: string): DbState {
-  const state = getDbState();
+export async function rejectDeposit(txId: string, adminId: string, note: string): Promise<DbState> {
+  const state = await getDbState();
   const tx = state.transactions.find(t => t.id === txId && t.type === 'deposit');
   if (!tx || tx.status !== 'pending') return state;
 
   tx.status = 'rejected';
   tx.adminNote = note || 'Rejected by administrator';
 
-  // Notify user
   state.notifications.push({
     id: nextId('notif'),
     userId: tx.userId,
@@ -546,7 +424,6 @@ export function rejectDeposit(txId: string, adminId: string, note: string): DbSt
     read: false
   });
 
-  // Log admin action
   state.auditLogs.push({
     id: nextId('log'),
     userId: adminId,
@@ -556,13 +433,16 @@ export function rejectDeposit(txId: string, adminId: string, note: string): DbSt
     ipAddress: '127.0.0.1'
   });
 
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-// Admin Actions: Withdrawal Management
-export function approveWithdrawal(txId: string, adminId: string, note?: string): DbState {
-  const state = getDbState();
+// ==========================================
+// ADMIN ACTIONS: WITHDRAWAL MANAGEMENT
+// ==========================================
+
+export async function approveWithdrawal(txId: string, adminId: string, note?: string): Promise<DbState> {
+  const state = await getDbState();
   const tx = state.transactions.find(t => t.id === txId && t.type === 'withdrawal');
   if (!tx || tx.status !== 'pending') return state;
 
@@ -570,21 +450,18 @@ export function approveWithdrawal(txId: string, adminId: string, note?: string):
   if (!user) return state;
 
   if (user.walletBalance < tx.amount) {
-    // Insufficient balance, auto-reject
     tx.status = 'rejected';
     tx.adminNote = 'System Auto-Rejected: Insufficient wallet balance.';
-    saveDbState(state);
+    await saveDbState(state);
     return state;
   }
 
   tx.status = 'approved';
   tx.adminNote = note || 'Processed & Approved';
 
-  // Deduct from wallet balance ONLY now that admin has approved!
   user.walletBalance -= tx.amount;
   user.totalWithdrawals += tx.amount;
 
-  // Notify user
   state.notifications.push({
     id: nextId('notif'),
     userId: tx.userId,
@@ -594,7 +471,6 @@ export function approveWithdrawal(txId: string, adminId: string, note?: string):
     read: false
   });
 
-  // Log admin action
   state.auditLogs.push({
     id: nextId('log'),
     userId: adminId,
@@ -604,19 +480,18 @@ export function approveWithdrawal(txId: string, adminId: string, note?: string):
     ipAddress: '127.0.0.1'
   });
 
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function rejectWithdrawal(txId: string, adminId: string, note: string): DbState {
-  const state = getDbState();
+export async function rejectWithdrawal(txId: string, adminId: string, note: string): Promise<DbState> {
+  const state = await getDbState();
   const tx = state.transactions.find(t => t.id === txId && t.type === 'withdrawal');
   if (!tx || tx.status !== 'pending') return state;
 
   tx.status = 'rejected';
   tx.adminNote = note || 'Rejected by administrator';
 
-  // Notify user
   state.notifications.push({
     id: nextId('notif'),
     userId: tx.userId,
@@ -626,7 +501,6 @@ export function rejectWithdrawal(txId: string, adminId: string, note: string): D
     read: false
   });
 
-  // Log admin action
   state.auditLogs.push({
     id: nextId('log'),
     userId: adminId,
@@ -636,32 +510,34 @@ export function rejectWithdrawal(txId: string, adminId: string, note: string): D
     ipAddress: '127.0.0.1'
   });
 
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-// User Profile Settings & Verification
-export function updateProfile(userId: string, data: Partial<User>): DbState {
-  const state = getDbState();
+// ==========================================
+// USER PROFILE MANAGEMENT
+// ==========================================
+
+export async function updateProfile(userId: string, data: Partial<User>): Promise<DbState> {
+  const state = await getDbState();
   state.users = state.users.map(u => {
     if (u.id === userId) {
       return { ...u, ...data };
     }
     return u;
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function submitKyc(userId: string): DbState {
-  const state = getDbState();
+export async function submitKyc(userId: string): Promise<DbState> {
+  const state = await getDbState();
   state.users = state.users.map(u => {
     if (u.id === userId) {
       return { ...u, kycStatus: 'pending' };
     }
     return u;
   });
-  // Add notification
   state.notifications.push({
     id: nextId('notif'),
     userId,
@@ -670,12 +546,12 @@ export function submitKyc(userId: string): DbState {
     date: new Date().toISOString(),
     read: false
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function approveKyc(userId: string, adminId: string): DbState {
-  const state = getDbState();
+export async function approveKyc(userId: string, adminId: string): Promise<DbState> {
+  const state = await getDbState();
   state.users = state.users.map(u => {
     if (u.id === userId) {
       return { ...u, kycStatus: 'verified' };
@@ -698,12 +574,12 @@ export function approveKyc(userId: string, adminId: string): DbState {
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function rejectKyc(userId: string, adminId: string): DbState {
-  const state = getDbState();
+export async function rejectKyc(userId: string, adminId: string): Promise<DbState> {
+  const state = await getDbState();
   state.users = state.users.map(u => {
     if (u.id === userId) {
       return { ...u, kycStatus: 'unverified' };
@@ -726,13 +602,16 @@ export function rejectKyc(userId: string, adminId: string): DbState {
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-// Admin: Manage Users (Suspend / Edit / Delete)
-export function adminUpdateUser(adminId: string, targetUserId: string, updates: Partial<User>): DbState {
-  const state = getDbState();
+// ==========================================
+// ADMIN: USER MANAGEMENT
+// ==========================================
+
+export async function adminUpdateUser(adminId: string, targetUserId: string, updates: Partial<User>): Promise<DbState> {
+  const state = await getDbState();
   state.users = state.users.map(u => {
     if (u.id === targetUserId) {
       return { ...u, ...updates };
@@ -747,12 +626,12 @@ export function adminUpdateUser(adminId: string, targetUserId: string, updates: 
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function adminDeleteUser(adminId: string, targetUserId: string): DbState {
-  const state = getDbState();
+export async function adminDeleteUser(adminId: string, targetUserId: string): Promise<DbState> {
+  const state = await getDbState();
   state.users = state.users.filter(u => u.id !== targetUserId);
   state.auditLogs.push({
     id: nextId('log'),
@@ -762,9 +641,8 @@ export function adminDeleteUser(adminId: string, targetUserId: string): DbState 
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
 
-  // Explicitly delete user from Supabase in the background
   if ((import.meta as any).env.VITE_SUPABASE_URL && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
     supabase.from('users').delete().eq('id', targetUserId).then(({ error }) => {
       if (error) console.error('Error deleting user from Supabase:', error);
@@ -774,9 +652,12 @@ export function adminDeleteUser(adminId: string, targetUserId: string): DbState 
   return state;
 }
 
-// Admin: Plans management
-export function adminCreatePlan(adminId: string, plan: Omit<InvestmentPlan, 'id'>): DbState {
-  const state = getDbState();
+// ==========================================
+// ADMIN: PLAN MANAGEMENT
+// ==========================================
+
+export async function adminCreatePlan(adminId: string, plan: Omit<InvestmentPlan, 'id'>): Promise<DbState> {
+  const state = await getDbState();
   const newPlan: InvestmentPlan = {
     ...plan,
     id: nextId('plan')
@@ -790,12 +671,16 @@ export function adminCreatePlan(adminId: string, plan: Omit<InvestmentPlan, 'id'
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function adminUpdatePlan(adminId: string, planId: string, updates: Partial<InvestmentPlan>): DbState {
-  const state = getDbState();
+export async function adminUpdatePlan(
+  adminId: string,
+  planId: string,
+  updates: Partial<InvestmentPlan>
+): Promise<DbState> {
+  const state = await getDbState();
   state.plans = state.plans.map(p => {
     if (p.id === planId) {
       return { ...p, ...updates };
@@ -810,12 +695,12 @@ export function adminUpdatePlan(adminId: string, planId: string, updates: Partia
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export function adminDeletePlan(adminId: string, planId: string): DbState {
-  const state = getDbState();
+export async function adminDeletePlan(adminId: string, planId: string): Promise<DbState> {
+  const state = await getDbState();
   state.plans = state.plans.filter(p => p.id !== planId);
   state.auditLogs.push({
     id: nextId('log'),
@@ -825,9 +710,8 @@ export function adminDeletePlan(adminId: string, planId: string): DbState {
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
 
-  // Explicitly delete plan from Supabase in the background
   if ((import.meta as any).env.VITE_SUPABASE_URL && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
     supabase.from('plans').delete().eq('id', planId).then(({ error }) => {
       if (error) console.error('Error deleting plan from Supabase:', error);
@@ -837,9 +721,16 @@ export function adminDeletePlan(adminId: string, planId: string): DbState {
   return state;
 }
 
-// Admin: Referral settings
-export function adminUpdateReferralSettings(adminId: string, enabled: boolean, rate: number): DbState {
-  const state = getDbState();
+// ==========================================
+// ADMIN: SETTINGS
+// ==========================================
+
+export async function adminUpdateReferralSettings(
+  adminId: string,
+  enabled: boolean,
+  rate: number
+): Promise<DbState> {
+  const state = await getDbState();
   state.referralRewardsEnabled = enabled;
   state.referralCommissionRate = rate;
   state.auditLogs.push({
@@ -850,16 +741,20 @@ export function adminUpdateReferralSettings(adminId: string, enabled: boolean, r
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-// Admin: Send Notifications
-export function adminSendNotification(adminId: string, targetUserId: string, title: string, message: string): DbState {
-  const state = getDbState();
+export async function adminSendNotification(
+  adminId: string,
+  targetUserId: string,
+  title: string,
+  message: string
+): Promise<DbState> {
+  const state = await getDbState();
   state.notifications.push({
     id: nextId('notif'),
-    userId: targetUserId, // Can be 'all'
+    userId: targetUserId,
     title,
     message,
     date: new Date().toISOString(),
@@ -873,12 +768,11 @@ export function adminSendNotification(adminId: string, targetUserId: string, tit
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-// Admin: Update company settings
-export function adminUpdateCompanySettings(
+export async function adminUpdateCompanySettings(
   adminId: string,
   updates: {
     companyBankName?: string;
@@ -890,8 +784,8 @@ export function adminUpdateCompanySettings(
     inquiriesDeskEmail?: string;
     inquiriesDeskPhone?: string;
   }
-): DbState {
-  const state = getDbState();
+): Promise<DbState> {
+  const state = await getDbState();
   if (updates.companyBankName !== undefined) state.companyBankName = updates.companyBankName;
   if (updates.companyAccountName !== undefined) state.companyAccountName = updates.companyAccountName;
   if (updates.companyAccountNumber !== undefined) state.companyAccountNumber = updates.companyAccountNumber;
@@ -909,15 +803,19 @@ export function adminUpdateCompanySettings(
     date: new Date().toISOString(),
     ipAddress: '127.0.0.1'
   });
-  saveDbState(state);
+  await saveDbState(state);
   return state;
 }
 
-export async function seedSupabase(state: DbState) {
+// ==========================================
+// SUPABASE SYNC (Production Database)
+// ==========================================
+
+export async function seedSupabase(state: DbState): Promise<void> {
   if (!(import.meta as any).env.VITE_SUPABASE_URL || !(import.meta as any).env.VITE_SUPABASE_ANON_KEY) return;
 
   try {
-    console.log('Seeding Supabase with initial demo database...');
+    console.log('Seeding Supabase with production data...');
     if (state.users && state.users.length > 0) {
       const { error } = await supabase.from('users').insert(state.users);
       if (error) console.error('Error seeding users:', error);
@@ -966,7 +864,7 @@ export async function seedSupabase(state: DbState) {
   }
 }
 
-export async function pushToSupabase(state: DbState) {
+export async function pushToSupabase(state: DbState): Promise<void> {
   if (!(import.meta as any).env.VITE_SUPABASE_URL || !(import.meta as any).env.VITE_SUPABASE_ANON_KEY) return;
 
   try {
@@ -998,7 +896,19 @@ export async function pushToSupabase(state: DbState) {
 
 export async function pullFromSupabase(): Promise<DbState> {
   if (!(import.meta as any).env.VITE_SUPABASE_URL || !(import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
-    return getDbState();
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(DB_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          return { ...INITIAL_STATE, ...parsed };
+        } catch (e) {
+          console.error('Error parsing cached DB state:', e);
+        }
+      }
+    }
+    return INITIAL_STATE;
   }
 
   try {
@@ -1023,11 +933,22 @@ export async function pullFromSupabase(): Promise<DbState> {
     ]);
 
     if (errUsers) {
-      console.warn('Could not read users from Supabase, possibly tables do not exist yet. Please run the SQL initialization script in your Supabase console.');
-      return getDbState();
+      console.warn('Could not connect to Supabase. Falling back to local cache.');
+      if (typeof window !== 'undefined') {
+        const raw = localStorage.getItem(DB_KEY);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            return { ...INITIAL_STATE, ...parsed };
+          } catch (e) {
+            console.error('Error parsing cached DB state:', e);
+          }
+        }
+      }
+      return INITIAL_STATE;
     }
 
-    const state = getDbState();
+    const state = { ...INITIAL_STATE };
 
     if (users && users.length > 0) {
       state.users = users as User[];
@@ -1053,19 +974,18 @@ export async function pullFromSupabase(): Promise<DbState> {
         });
       }
 
-      // Save locally to keep the fast cached copy up to date
+      // Cache locally
       if (typeof window !== 'undefined') {
         localStorage.setItem(DB_KEY, JSON.stringify(state));
       }
     } else {
-      // Database exists but has no data: seed the default records so the application starts filled
+      // Database exists but is empty: seed it
       await seedSupabase(state);
     }
 
     return state;
   } catch (error) {
     console.error('Error pulling from Supabase:', error);
-    return getDbState();
+    return INITIAL_STATE;
   }
 }
-
