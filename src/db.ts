@@ -1,7 +1,7 @@
-import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan } from './types';
+import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan, DailyTask, TaskClaim } from './types';
 import { supabase } from './lib/supabase';
 
-interface DbState {
+export interface DbState {
   users: User[];
   transactions: Transaction[];
   investments: Investment[];
@@ -9,6 +9,8 @@ interface DbState {
   referrals: Referral[];
   auditLogs: AuditLog[];
   plans: InvestmentPlan[];
+  tasks: DailyTask[];
+  taskClaims: TaskClaim[];
   referralRewardsEnabled: boolean;
   referralCommissionRate: number;
   companyBankName: string;
@@ -32,7 +34,7 @@ const defaultPlans: InvestmentPlan[] = [
   { id: 'elite', name: 'Elite Partner', deposit: 0, dailyReturn: 0.045, type: 'elite', minElite: 2000000, maxElite: 200000000, paused: false }
 ];
 
-const INITIAL_STATE: DbState = {
+export const INITIAL_STATE: DbState = {
   users: [],
   transactions: [],
   investments: [],
@@ -40,6 +42,8 @@ const INITIAL_STATE: DbState = {
   referrals: [],
   auditLogs: [],
   plans: defaultPlans,
+  tasks: [],
+  taskClaims: [],
   referralRewardsEnabled: true,
   referralCommissionRate: 10,
   companyBankName: 'Access Bank Plc',
@@ -156,6 +160,9 @@ export async function processROIPayouts(): Promise<DbState> {
     return state;
   }
 }
+
+// Alias used by App.tsx for the periodic/on-load ROI simulation loop
+export const simulateROI = processROIPayouts;
 
 // ==========================================
 // USER ACTIONS
@@ -653,6 +660,70 @@ export async function adminDeleteUser(adminId: string, targetUserId: string): Pr
 }
 
 // ==========================================
+// ADMIN: BANK DETAILS VERIFICATION
+// ==========================================
+
+export async function adminVerifyBankDetails(
+  adminId: string,
+  targetUserId: string,
+  status: 'verified' | 'rejected',
+  note?: string
+): Promise<DbState> {
+  const state = await getDbState();
+  state.users = state.users.map(u => {
+    if (u.id === targetUserId) {
+      return {
+        ...u,
+        bankVerificationStatus: status,
+        bankAdminNote: status === 'rejected' ? (note || '') : ''
+      };
+    }
+    return u;
+  });
+  state.auditLogs.push({
+    id: nextId('log'),
+    userId: adminId,
+    action: 'VERIFY_BANK_DETAILS',
+    details: `Set bank verification status to ${status} for user ${targetUserId}${note ? ` (note: ${note})` : ''}`,
+    date: new Date().toISOString(),
+    ipAddress: '127.0.0.1'
+  });
+  await saveDbState(state);
+  return state;
+}
+
+export async function adminEditUserBankDetails(
+  adminId: string,
+  targetUserId: string,
+  bankName: string,
+  accountName: string,
+  accountNumber: string
+): Promise<DbState> {
+  const state = await getDbState();
+  state.users = state.users.map(u => {
+    if (u.id === targetUserId) {
+      return {
+        ...u,
+        withdrawalBankName: bankName,
+        withdrawalAccountName: accountName,
+        withdrawalAccountNumber: accountNumber
+      };
+    }
+    return u;
+  });
+  state.auditLogs.push({
+    id: nextId('log'),
+    userId: adminId,
+    action: 'EDIT_USER_BANK_DETAILS',
+    details: `Administrator updated payout bank details for user ${targetUserId}`,
+    date: new Date().toISOString(),
+    ipAddress: '127.0.0.1'
+  });
+  await saveDbState(state);
+  return state;
+}
+
+// ==========================================
 // ADMIN: PLAN MANAGEMENT
 // ==========================================
 
@@ -715,6 +786,76 @@ export async function adminDeletePlan(adminId: string, planId: string): Promise<
   if ((import.meta as any).env.VITE_SUPABASE_URL && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
     supabase.from('plans').delete().eq('id', planId).then(({ error }) => {
       if (error) console.error('Error deleting plan from Supabase:', error);
+    });
+  }
+
+  return state;
+}
+
+// ==========================================
+// ADMIN: DAILY ENGAGEMENT TASKS
+// ==========================================
+
+export async function adminCreateTask(adminId: string, task: Omit<DailyTask, 'id'>): Promise<DbState> {
+  const state = await getDbState();
+  const newTask: DailyTask = {
+    ...task,
+    id: nextId('task')
+  };
+  state.tasks.push(newTask);
+  state.auditLogs.push({
+    id: nextId('log'),
+    userId: adminId,
+    action: 'CREATE_TASK',
+    details: `Published new daily engagement task "${newTask.title}" (${newTask.platformType})`,
+    date: new Date().toISOString(),
+    ipAddress: '127.0.0.1'
+  });
+  await saveDbState(state);
+  return state;
+}
+
+export async function adminUpdateTask(
+  adminId: string,
+  taskId: string,
+  updates: Partial<DailyTask>
+): Promise<DbState> {
+  const state = await getDbState();
+  state.tasks = state.tasks.map(t => {
+    if (t.id === taskId) {
+      return { ...t, ...updates };
+    }
+    return t;
+  });
+  state.auditLogs.push({
+    id: nextId('log'),
+    userId: adminId,
+    action: 'UPDATE_TASK',
+    details: `Updated daily engagement task ${taskId} with updates: ${JSON.stringify(updates)}`,
+    date: new Date().toISOString(),
+    ipAddress: '127.0.0.1'
+  });
+  await saveDbState(state);
+  return state;
+}
+
+export async function adminDeleteTask(adminId: string, taskId: string): Promise<DbState> {
+  const state = await getDbState();
+  state.tasks = state.tasks.filter(t => t.id !== taskId);
+  state.taskClaims = state.taskClaims.filter(c => c.taskId !== taskId);
+  state.auditLogs.push({
+    id: nextId('log'),
+    userId: adminId,
+    action: 'DELETE_TASK',
+    details: `Deleted daily engagement task ${taskId}`,
+    date: new Date().toISOString(),
+    ipAddress: '127.0.0.1'
+  });
+  await saveDbState(state);
+
+  if ((import.meta as any).env.VITE_SUPABASE_URL && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
+    supabase.from('tasks').delete().eq('id', taskId).then(({ error }) => {
+      if (error) console.error('Error deleting task from Supabase:', error);
     });
   }
 
@@ -844,6 +985,14 @@ export async function seedSupabase(state: DbState): Promise<void> {
       const { error } = await supabase.from('plans').insert(state.plans);
       if (error) console.error('Error seeding plans:', error);
     }
+    if (state.tasks && state.tasks.length > 0) {
+      const { error } = await supabase.from('tasks').insert(state.tasks);
+      if (error) console.error('Error seeding tasks:', error);
+    }
+    if (state.taskClaims && state.taskClaims.length > 0) {
+      const { error } = await supabase.from('task_claims').insert(state.taskClaims);
+      if (error) console.error('Error seeding task claims:', error);
+    }
     const settingsData = [
       { key: 'referralRewardsEnabled', value: state.referralRewardsEnabled },
       { key: 'referralCommissionRate', value: state.referralCommissionRate },
@@ -876,6 +1025,8 @@ export async function pushToSupabase(state: DbState): Promise<void> {
       state.referrals.length > 0 ? supabase.from('referrals').upsert(state.referrals) : Promise.resolve(),
       state.auditLogs.length > 0 ? supabase.from('audit_logs').upsert(state.auditLogs) : Promise.resolve(),
       state.plans.length > 0 ? supabase.from('plans').upsert(state.plans) : Promise.resolve(),
+      state.tasks.length > 0 ? supabase.from('tasks').upsert(state.tasks) : Promise.resolve(),
+      state.taskClaims.length > 0 ? supabase.from('task_claims').upsert(state.taskClaims) : Promise.resolve(),
       supabase.from('settings').upsert([
         { key: 'referralRewardsEnabled', value: state.referralRewardsEnabled },
         { key: 'referralCommissionRate', value: state.referralCommissionRate },
@@ -920,6 +1071,8 @@ export async function pullFromSupabase(): Promise<DbState> {
       { data: referrals },
       { data: auditLogs },
       { data: plans },
+      { data: tasks },
+      { data: taskClaims },
       { data: settings }
     ] = await Promise.all([
       supabase.from('users').select('*'),
@@ -929,6 +1082,8 @@ export async function pullFromSupabase(): Promise<DbState> {
       supabase.from('referrals').select('*'),
       supabase.from('audit_logs').select('*'),
       supabase.from('plans').select('*'),
+      supabase.from('tasks').select('*'),
+      supabase.from('task_claims').select('*'),
       supabase.from('settings').select('*')
     ]);
 
@@ -958,6 +1113,8 @@ export async function pullFromSupabase(): Promise<DbState> {
       state.referrals = (referrals || []) as Referral[];
       state.auditLogs = (auditLogs || []) as AuditLog[];
       state.plans = (plans || []) as InvestmentPlan[];
+      state.tasks = (tasks || []) as DailyTask[];
+      state.taskClaims = (taskClaims || []) as TaskClaim[];
 
       if (settings) {
         settings.forEach((s: any) => {
