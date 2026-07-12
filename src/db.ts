@@ -1,4 +1,4 @@
-import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan } from './types';
+import { User, Transaction, Investment, Notification, Referral, AuditLog, InvestmentPlan, DailyTask, TaskClaim } from './types';
 import { supabase } from './lib/supabase';
 
 interface DbState {
@@ -19,6 +19,8 @@ interface DbState {
   inquiriesDeskAddress: string;
   inquiriesDeskEmail: string;
   inquiriesDeskPhone: string;
+  tasks?: DailyTask[];
+  taskClaims?: TaskClaim[];
 }
 
 // Initial seed plans
@@ -49,7 +51,9 @@ const INITIAL_STATE: DbState = {
   inquiriesDeskText: 'Have custom compliance, regulatory, or institutional partnership questions? Our premium advisor team is here to support you 24 hours a day, 5 days a week.',
   inquiriesDeskAddress: 'Level 24, Tower 3, Marina Mall Financial Center, Lagos',
   inquiriesDeskEmail: 'support@primevest.capital',
-  inquiriesDeskPhone: '+234 (1) 4950 200'
+  inquiriesDeskPhone: '+234 (1) 4950 200',
+  tasks: [],
+  taskClaims: []
 };
 
 const DB_KEY = 'primevest_db_state';
@@ -868,6 +872,130 @@ export function adminUpdateCompanySettings(
   saveDbState(state);
   return state;
 }
+
+export function adminVerifyBankDetails(
+  adminId: string,
+  targetUserId: string,
+  status: 'verified' | 'rejected',
+  note: string
+): DbState {
+  const state = getDbState();
+  const user = state.users.find(u => u.id === targetUserId);
+  if (user) {
+    user.bankVerificationStatus = status;
+    user.bankAdminNote = note;
+    
+    state.auditLogs.push({
+      id: nextId('log'),
+      userId: adminId,
+      action: `VERIFY_BANK_${status.toUpperCase()}`,
+      details: `Bank verification details approved/rejected for user ID ${targetUserId}. Note: ${note}`,
+      date: new Date().toISOString(),
+      ipAddress: '127.0.0.1'
+    });
+    
+    // Also send user notification
+    state.notifications.push({
+      id: nextId('notif'),
+      userId: targetUserId,
+      title: status === 'verified' ? 'Bank Details Approved' : 'Bank Details Rejected',
+      message: status === 'verified' 
+        ? 'Your withdrawal bank details have been successfully verified by compliance.' 
+        : `Your withdrawal bank details were rejected. Reason: ${note}. Please update them under Account settings.`,
+      date: new Date().toISOString(),
+      read: false
+    });
+  }
+  saveDbState(state);
+  return state;
+}
+
+export function adminEditUserBankDetails(
+  adminId: string,
+  targetUserId: string,
+  bankName: string,
+  bankHolder: string,
+  bankNumber: string
+): DbState {
+  const state = getDbState();
+  const user = state.users.find(u => u.id === targetUserId);
+  if (user) {
+    user.withdrawalBankName = bankName;
+    user.withdrawalAccountName = bankHolder;
+    user.withdrawalAccountNumber = bankNumber;
+    user.bankVerificationStatus = 'verified';
+    user.bankAdminNote = 'Updated and auto-verified by administrator.';
+    
+    state.auditLogs.push({
+      id: nextId('log'),
+      userId: adminId,
+      action: 'ADMIN_EDIT_BANK_DETAILS',
+      details: `Administrator updated bank details for user ID ${targetUserId}.`,
+      date: new Date().toISOString(),
+      ipAddress: '127.0.0.1'
+    });
+  }
+  saveDbState(state);
+  return state;
+}
+
+export function adminCreateTask(adminId: string, task: Omit<DailyTask, 'id'>): DbState {
+  const state = getDbState();
+  state.tasks = state.tasks || [];
+  const newTask: DailyTask = {
+    ...task,
+    id: nextId('task')
+  };
+  state.tasks.push(newTask);
+  
+  state.auditLogs.push({
+    id: nextId('log'),
+    userId: adminId,
+    action: 'CREATE_TASK',
+    details: `Created daily task: "${task.title}"`,
+    date: new Date().toISOString(),
+    ipAddress: '127.0.0.1'
+  });
+  saveDbState(state);
+  return state;
+}
+
+export function adminUpdateTask(adminId: string, taskId: string, updates: Partial<DailyTask>): DbState {
+  const state = getDbState();
+  state.tasks = state.tasks || [];
+  const task = state.tasks.find(t => t.id === taskId);
+  if (task) {
+    Object.assign(task, updates);
+    state.auditLogs.push({
+      id: nextId('log'),
+      userId: adminId,
+      action: 'UPDATE_TASK',
+      details: `Updated task ID: ${taskId}`,
+      date: new Date().toISOString(),
+      ipAddress: '127.0.0.1'
+    });
+  }
+  saveDbState(state);
+  return state;
+}
+
+export function adminDeleteTask(adminId: string, taskId: string): DbState {
+  const state = getDbState();
+  state.tasks = state.tasks || [];
+  state.tasks = state.tasks.filter(t => t.id !== taskId);
+  
+  state.auditLogs.push({
+    id: nextId('log'),
+    userId: adminId,
+    action: 'DELETE_TASK',
+    details: `Deleted task ID: ${taskId}`,
+    date: new Date().toISOString(),
+    ipAddress: '127.0.0.1'
+  });
+  saveDbState(state);
+  return state;
+}
+
 
 export async function seedSupabase(state: DbState) {
   if (!(import.meta as any).env.VITE_SUPABASE_URL || !(import.meta as any).env.VITE_SUPABASE_ANON_KEY) return;

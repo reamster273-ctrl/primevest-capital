@@ -5,9 +5,6 @@ import {
   UserMinus, UserCheck, Key, Settings, RefreshCw, ChevronRight, Eye,
   ArrowUp, ArrowDown, GripVertical, Award, CheckSquare, CheckCircle, XCircle, Activity, Landmark
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar 
-} from 'recharts';
 import { User, Transaction, Investment, Notification, InvestmentPlan, DailyTask } from '../types';
 import { 
   getDbState, approveDeposit, rejectDeposit, approveWithdrawal, rejectWithdrawal, 
@@ -17,28 +14,6 @@ import {
   adminCreateTask, adminUpdateTask, adminDeleteTask
 } from '../db';
 import Footer from './Footer';
-
-// Styled tooltip for Recharts
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg shadow-xl font-mono text-xs text-zinc-300">
-        <p className="font-bold text-gray-200 mb-1">{label}</p>
-        {payload.map((p: any) => (
-          <p key={p.name} style={{ color: p.color }} className="flex justify-between gap-4">
-            <span>{p.name}:</span>
-            <span className="font-bold text-white">
-              {p.name.includes('Capital') || p.name.includes('Money') 
-                ? '₦' + Math.round(p.value).toLocaleString() 
-                : p.value}
-            </span>
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
 
 interface AdminPanelProps {
   adminId: string;
@@ -769,56 +744,73 @@ export default function AdminPanel({ adminId, onNavigateToUser, onBackToDashboar
                   </div>
                 </div>
 
-                <div className="h-64 w-full pt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    {chartView === 'capital' ? (
-                      <AreaChart
-                        data={[
-                          { date: 'Jan', 'Admin Managed Money': 800000 },
-                          { date: 'Feb', 'Admin Managed Money': 1200000 },
-                          { date: 'Mar', 'Admin Managed Money': 1500000 },
-                          { date: 'Apr', 'Admin Managed Money': 1900000 },
-                          { date: 'May', 'Admin Managed Money': 2300000 },
-                          { date: 'Jun', 'Admin Managed Money': 3100000 },
-                          { date: 'Jul', 'Admin Managed Money': totalDepositsSum + activeInvestmentsSum }
-                        ]}
-                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient id="goldGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#D4AF37" stopOpacity={0.0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid stroke="#16161d" vertical={false} />
-                        <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₦${(v/1000).toFixed(0)}k`} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Area type="monotone" dataKey="Admin Managed Money" stroke="#D4AF37" strokeWidth={2} fillOpacity={1} fill="url(#goldGradient)" />
-                      </AreaChart>
-                    ) : (
-                      <BarChart
-                        data={[
-                          { date: 'Jan', 'Active Users': 2, 'New Registrations': 1 },
-                          { date: 'Feb', 'Active Users': 3, 'New Registrations': 1 },
-                          { date: 'Mar', 'Active Users': 3, 'New Registrations': 0 },
-                          { date: 'Apr', 'Active Users': 4, 'New Registrations': 1 },
-                          { date: 'May', 'Active Users': 4, 'New Registrations': 1 },
-                          { date: 'Jun', 'Active Users': 5, 'New Registrations': 2 },
-                          { date: 'Jul', 'Active Users': activeUsersCount, 'New Registrations': db.users.filter(u => u.role !== 'admin' && u.registeredAt?.startsWith('2026-07')).length || 1 }
-                        ]}
-                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                      >
-                        <CartesianGrid stroke="#16161d" vertical={false} />
-                        <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'monospace', paddingTop: 8 }} />
-                        <Bar dataKey="Active Users" fill="#D4AF37" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="New Registrations" fill="#ffffff" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    )}
-                  </ResponsiveContainer>
+                <div className="min-h-64 w-full pt-2">
+                  {chartView === 'capital' ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {[
+                        { month: 'Jan', amount: 800000 },
+                        { month: 'Feb', amount: 1200000 },
+                        { month: 'Mar', amount: 1500000 },
+                        { month: 'Apr', amount: 1900000 },
+                        { month: 'May', amount: 2300000 },
+                        { month: 'Jun', amount: 3100000 },
+                        { month: 'Jul (Current)', amount: totalDepositsSum + activeInvestmentsSum, isCurrent: true }
+                      ].map((item, idx) => {
+                        const maxVal = Math.max(3100000, totalDepositsSum + activeInvestmentsSum) || 1;
+                        const fillPercent = Math.min(100, Math.round((item.amount / maxVal) * 100));
+                        return (
+                          <div key={idx} className={`p-4 bg-black rounded-lg border ${item.isCurrent ? 'border-yellow-500/40 bg-yellow-950/5' : 'border-zinc-900'} flex flex-col justify-between space-y-3`}>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-mono uppercase text-zinc-500">{item.month}</span>
+                              {item.isCurrent && <span className="text-[9px] bg-yellow-500 text-black font-bold font-mono px-1.5 py-0.5 rounded-full uppercase tracking-wider">Live</span>}
+                            </div>
+                            <div>
+                              <span className="text-zinc-600 text-[9px] font-mono">Managed Capital</span>
+                              <p className={`text-sm font-bold ${item.isCurrent ? 'text-yellow-500' : 'text-gray-200'} mt-0.5`}>₦{item.amount.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <div className="flex justify-between items-center text-[9px] font-mono mb-1">
+                                <span className="text-zinc-600">Proportional Share</span>
+                                <span className="text-zinc-400 font-bold">{fillPercent}%</span>
+                              </div>
+                              <div className="w-full bg-zinc-950 h-1 rounded-full overflow-hidden">
+                                <div className="bg-yellow-500 h-full rounded-full transition-all duration-500" style={{ width: `${fillPercent}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {[
+                        { month: 'Jan', active: 2, newRegs: 1 },
+                        { month: 'Feb', active: 3, newRegs: 1 },
+                        { month: 'Mar', active: 3, newRegs: 0 },
+                        { month: 'Apr', active: 4, newRegs: 1 },
+                        { month: 'May', active: 4, newRegs: 1 },
+                        { month: 'Jun', active: 5, newRegs: 2 },
+                        { month: 'Jul (Current)', active: activeUsersCount, newRegs: db.users.filter(u => u.role !== 'admin' && u.registeredAt?.startsWith('2026-07')).length || 1, isCurrent: true }
+                      ].map((item, idx) => (
+                        <div key={idx} className={`p-4 bg-black rounded-lg border ${item.isCurrent ? 'border-yellow-500/40 bg-yellow-950/5' : 'border-zinc-900'} flex flex-col justify-between space-y-3`}>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-mono uppercase text-zinc-500">{item.month}</span>
+                            {item.isCurrent && <span className="text-[9px] bg-yellow-500 text-black font-bold font-mono px-1.5 py-0.5 rounded-full uppercase tracking-wider">Live</span>}
+                          </div>
+                          <div className="space-y-2 pt-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] text-zinc-500 font-mono">Active Investors</span>
+                              <span className="text-xs font-bold text-yellow-500">{item.active}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] text-zinc-500 font-mono">New Registrations</span>
+                              <span className="text-xs font-bold text-white">+{item.newRegs}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
