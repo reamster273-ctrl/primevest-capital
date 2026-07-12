@@ -13,6 +13,7 @@ import Footer from './Footer';
 import TransactionHistory from './TransactionHistory';
 
 interface DashboardProps {
+  key?: string;
   userId: string;
   onLogout: () => void;
   onNavigateToAdmin: () => void;
@@ -21,7 +22,10 @@ interface DashboardProps {
 export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: DashboardProps) {
   // Database local states
   const [db, setDb] = useState(getDbState());
-  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserType | null>(() => {
+    const currentDb = getDbState();
+    return currentDb.users.find(u => u.id === userId) || null;
+  });
   
   // UI views: 'overview' | 'wallet' | 'investments' | 'referrals' | 'settings' | 'notifications'
   const [activeTab, setActiveTab] = useState<'overview' | 'wallet' | 'investments' | 'referrals' | 'settings' | 'notifications'>('overview');
@@ -68,7 +72,11 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
   const [acceptedRisk, setAcceptedRisk] = useState(false);
 
   // Referral customize code
-  const [newReferralCode, setNewReferralCode] = useState('');
+  const [newReferralCode, setNewReferralCode] = useState(() => {
+    const currentDb = getDbState();
+    const user = currentDb.users.find(u => u.id === userId);
+    return user ? user.referralCode : '';
+  });
   
   // Notification states
   const [unreadCount, setUnreadCount] = useState(0);
@@ -85,14 +93,34 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Profile forms
-  const [profileName, setProfileName] = useState('');
-  const [profilePhone, setProfilePhone] = useState('');
+  const [profileName, setProfileName] = useState(() => {
+    const currentDb = getDbState();
+    const user = currentDb.users.find(u => u.id === userId);
+    return user ? user.name : '';
+  });
+  const [profilePhone, setProfilePhone] = useState(() => {
+    const currentDb = getDbState();
+    const user = currentDb.users.find(u => u.id === userId);
+    return user ? user.phone || '' : '';
+  });
   const [profilePassword, setProfilePassword] = useState('');
 
   // User withdrawal payout settings states
-  const [withdrawalBankName, setWithdrawalBankName] = useState('');
-  const [withdrawalAccountName, setWithdrawalAccountName] = useState('');
-  const [withdrawalAccountNumber, setWithdrawalAccountNumber] = useState('');
+  const [withdrawalBankName, setWithdrawalBankName] = useState(() => {
+    const currentDb = getDbState();
+    const user = currentDb.users.find(u => u.id === userId);
+    return user ? user.withdrawalBankName || '' : '';
+  });
+  const [withdrawalAccountName, setWithdrawalAccountName] = useState(() => {
+    const currentDb = getDbState();
+    const user = currentDb.users.find(u => u.id === userId);
+    return user ? user.withdrawalAccountName || '' : '';
+  });
+  const [withdrawalAccountNumber, setWithdrawalAccountNumber] = useState(() => {
+    const currentDb = getDbState();
+    const user = currentDb.users.find(u => u.id === userId);
+    return user ? user.withdrawalAccountNumber || '' : '';
+  });
   const [bankSuccess, setBankSuccess] = useState('');
   const [bankError, setBankError] = useState('');
 
@@ -103,12 +131,6 @@ export default function Dashboard({ userId, onLogout, onNavigateToAdmin }: Dashb
     const user = currentDb.users.find(u => u.id === userId);
     if (user) {
       setCurrentUser(user);
-      setProfileName(user.name);
-      setProfilePhone(user.phone || '');
-      setNewReferralCode(user.referralCode);
-      setWithdrawalBankName(user.withdrawalBankName || '');
-      setWithdrawalAccountName(user.withdrawalAccountName || '');
-      setWithdrawalAccountNumber(user.withdrawalAccountNumber || '');
     }
     
     // Count unread notifications

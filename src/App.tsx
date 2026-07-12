@@ -183,6 +183,7 @@ export default function App() {
 
         {currentPage === 'dashboard' && activeUserId && (
           <Dashboard 
+            key={activeUserId}
             userId={activeUserId}
             onLogout={handleLogout}
             onNavigateToAdmin={() => handleNavigate('admin')}
@@ -191,9 +192,10 @@ export default function App() {
 
         {currentPage === 'admin' && activeUserId && (
           <AdminPanel 
+            key={activeUserId}
             adminId={activeUserId}
             onNavigateToUser={(uid) => {
-              handleSimulateLogin(uid);
+               handleSimulateLogin(uid);
             }}
             onBackToDashboard={() => handleNavigate('dashboard')}
           />

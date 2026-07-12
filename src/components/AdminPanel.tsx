@@ -41,6 +41,7 @@ import {
 import Footer from './Footer';
 
 interface AdminPanelProps {
+  key?: string;
   adminId: string;
   onNavigateToUser: (userId: string) => void;
   onBackToDashboard: () => void;
@@ -1530,7 +1531,7 @@ export default function AdminPanel({ adminId, onNavigateToUser, onBackToDashboar
                       required
                       placeholder="e.g. VIP Investment Pool Upgrade"
                       value={notifTitle}
-                      onChange={(e) => setNewPlanName(e.target.value)} // Wait, watch out for this typo, let's bind it correctly
+                      onChange={(e) => setNotifTitle(e.target.value)}
                       className="w-full bg-black border border-zinc-800 rounded px-4 py-2 text-sm focus:border-yellow-500 focus:outline-none transition"
                     />
                   </div>
