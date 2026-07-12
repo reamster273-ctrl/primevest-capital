@@ -1,8 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Access client-side Vite environment variables
-const rawUrl = ((import.meta as any).env.VITE_SUPABASE_URL || '').trim();
-const rawKey = ((import.meta as any).env.VITE_SUPABASE_ANON_KEY || '').trim();
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+console.log("import.meta.env.VITE_SUPABASE_URL:", rawUrl);
+console.log("import.meta.env.VITE_SUPABASE_ANON_KEY:", rawKey);
+
+let cleanUrl = rawUrl;
+if (cleanUrl.includes('/rest/v1')) {
+  console.warn("Supabase URL contains rest/v1/ path. Normalizing to root URL.");
+  cleanUrl = cleanUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+}
 
 function isValidUrl(url: string): boolean {
   if (!url) return false;
@@ -22,9 +31,10 @@ function isValidUrl(url: string): boolean {
 
 let supabaseInstance: any;
 
-if (isValidUrl(rawUrl) && rawKey) {
+if (isValidUrl(cleanUrl) && rawKey) {
   try {
-    supabaseInstance = createClient(rawUrl, rawKey);
+    supabaseInstance = createClient(cleanUrl, rawKey);
+    console.log("Supabase client successfully initialized with:", cleanUrl);
   } catch (err) {
     console.error('Failed to initialize Supabase client:', err);
   }

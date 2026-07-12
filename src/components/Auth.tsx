@@ -149,8 +149,13 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
 
       localStorage.setItem('primevest_active_user', data.user.id);
       onAuthSuccess(data.user.id);
-    } catch (err: any) {
-      setError(err.message || 'An unexpected authentication error occurred.');
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(JSON.stringify(err));
+      }
     }
   };
 
@@ -209,8 +214,13 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
 
       localStorage.setItem('primevest_active_user', user.id);
       onAuthSuccess(user.id);
-    } catch (err: any) {
-      setError(err.message || 'Error verifying 2FA.');
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(JSON.stringify(err));
+      }
     }
   };
 
@@ -219,6 +229,8 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
     setError('');
     setSuccess('');
 
+    console.log("Register clicked");
+
     if (password.length < 6) {
       setError('Password must be at least 6 characters long.');
       return;
@@ -226,6 +238,7 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
 
     try {
       // 1. Sign up user using Supabase Auth
+      console.log("Creating auth user...");
       const { data, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -236,7 +249,12 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
         }
       });
 
+      const result = { data, error: authError };
+      console.log("result:", result);
+      console.log("error:", authError);
+
       if (authError) {
+        console.error("Auth signUp error:", authError);
         // Fallback for offline development / missing key
         const db = getDbState();
         const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -324,10 +342,16 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
         loginCount: 1,
       };
 
+      console.log("Inserting user profile record into custom users table...", newUser);
       const { error: insertError } = await supabase.from('users').insert(newUser);
       if (insertError) {
-        setError(insertError.message);
-        return;
+        console.warn("Insert failed, trying upsert as a backup...", insertError);
+        const { error: upsertError } = await supabase.from('users').upsert(newUser);
+        if (upsertError) {
+          console.error("Upsert backup also failed:", upsertError);
+          setError(upsertError.message || insertError.message);
+          return;
+        }
       }
 
       // Track referral signup connection
@@ -373,7 +397,12 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
         setView('verify');
       }, 1500);
     } catch (err: any) {
-      setError(err.message || 'An error occurred during registration.');
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(JSON.stringify(err));
+      }
     }
   };
 
@@ -402,8 +431,13 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
 
       setResetCodeSent(true);
       setSuccess('A secure password reset link has been dispatched to your email.');
-    } catch (err: any) {
-      setError(err.message || 'Error sending password reset email.');
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(JSON.stringify(err));
+      }
     }
   };
 
@@ -445,8 +479,13 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
         setResetCodeSent(false);
         setPassword('');
       }, 1500);
-    } catch (err: any) {
-      setError(err.message || 'Error updating password.');
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(JSON.stringify(err));
+      }
     }
   };
 
@@ -474,7 +513,8 @@ export default function Auth({ initialView, onAuthSuccess, onNavigate, referralC
       setTimeout(() => {
         onAuthSuccess(activeUserId);
       }, 1500);
-    } catch (err: any) {
+    } catch (err) {
+      console.error("Supabase email verification error:", err);
       // Fallback
       const db = getDbState();
       db.users = db.users.map(u => {
