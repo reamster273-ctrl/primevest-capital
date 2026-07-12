@@ -126,6 +126,7 @@ export default function AdminPanel({ adminId, onNavigateToUser, onBackToDashboar
   const [rejectType, setRejectType] = useState<'deposit' | 'withdrawal'>('deposit');
   const [rejectionNote, setRejectionNote] = useState('');
   const [previewReceipt, setPreviewReceipt] = useState<{ file: string; name: string } | null>(null);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
 
   useEffect(() => {
     const freshDb = getDbState();
@@ -148,7 +149,6 @@ export default function AdminPanel({ adminId, onNavigateToUser, onBackToDashboar
   };
 
   // Drag-and-drop and arrow handlers for reordering plans
-  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
